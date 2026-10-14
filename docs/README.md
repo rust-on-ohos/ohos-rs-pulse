@@ -1,6 +1,4 @@
-# ohos-rs Pulse — Documentation
-
-**Status:** Draft / proposed design
+# ohos-rs-pulse
 
 The project collects reproducible evidence for specific Rust usage scenarios on OpenHarmony. The initial scope is one upstream libc file I/O scenario, a small `ohos-pulse` CLI, and GitHub Actions workflows.
 

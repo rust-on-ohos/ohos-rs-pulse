@@ -1,13 +1,17 @@
-# High-Level Design — ohos-rs Pulse
+# High-Level Design — ohos-rs-pulse
 
-**Version:** 1.1 Draft  
+**Version:** 1.2 Draft<br>
 **Date:** 2026-10-14  
 **Owner:** Project maintainers  
 **Status:** Proposed — not an implementation claim
 
 ## 1. Purpose and problem
 
-The project provides reproducible, auditable evidence for specific Rust usage scenarios on OpenHarmony. GitHub Actions is the initial execution entry point. The lasting output is evidence that developers can inspect, reproduce, and use when reporting or fixing problems.
+ohos-rs-pulse is a continuously maintained OpenHarmony Rust compatibility validation project. It provides reproducible tests, public compatibility evidence, and an independently usable execution tool. The maintainer expands reviewed scenarios and detection capabilities over time, operates recurring validation, and uses findings to support upstream fixes.
+
+The project has three complementary outputs: a versioned collection of fixtures and test definitions, the `ohos-pulse` CLI for local and CI execution, and maintained public results with historical evidence. GitHub Actions is the initial automation platform. Community members can reproduce findings, contribute scenarios, and run the CLI in their own environments without depending on the project's database or a hosted API.
+
+The lasting value is trustworthy evidence that developers can inspect, reproduce, and use when reporting or fixing problems. CLI features and storage infrastructure grow in response to that work.
 
 A successful type check does not establish that an artifact can link, execute, or be used from ArkTS. Results also depend on dependency versions, features, SDK, target, and execution environment. A useful report must state exactly what was tested and what each outcome establishes.
 
@@ -20,9 +24,10 @@ The first users are Rust developers and crate maintainers investigating a concre
 - **G1:** Define bounded, reproducible scenarios using versioned fixtures and test manifests.
 - **G2:** Distinguish check, build/link, runtime, and ArkTS integration evidence for the declared artifact and usage context.
 - **G3:** Automate initial validation on standard GitHub-hosted runners, with explicit outcomes when runtime execution is unavailable.
-- **G4:** Preserve exact inputs, environment identity, commands, logs, and assertion evidence.
+- **G4:** Preserve exact inputs, environment identity, commands, logs, and assertion evidence; establish durable historical result storage after the MVP.
 - **G5:** Support manual upstream triage first, then comparable baseline analysis when enough trustworthy results exist.
 - **G6:** Keep the workload sustainable for one part-time maintainer; prove one fixture before expanding the matrix or framework.
+- **G7:** Sustain recurring validation and community contributions, adding coverage based on real developer needs and upstream findings.
 
 ## 3. Non-goals for the initial release
 
@@ -58,6 +63,11 @@ flowchart TD
   Runtime --> Evidence
   Evidence --> Report[JSON and Markdown artifacts]
   Report --> Review[Reproduce and triage upstream]
+  Evidence -. After MVP .-> Archive[Durable JSON evidence archive]
+  Archive --> Import[Trusted result importer]
+  Import --> History[PostgreSQL historical results]
+  History --> Query[Historical queries and reports]
+  Query --> Review
   Future[Future local or device execution] -. Same evidence contract .-> Evidence
 ```
 
@@ -77,6 +87,8 @@ Local or device execution can be added later through the same evidence contract 
 | Evidence collector | Store normalized stage outcomes and their supporting evidence | Schema-versioned JSON |
 | Report | Explain coverage, outcomes, limitations, and reproduction | Markdown and CI artifacts |
 | Baseline selection | Choose trusted historical evidence and check comparability | Manual initially; automated later |
+| Historical storage | Preserve source evidence and query runs across time | JSON first; PostgreSQL integration after MVP |
+| Result ingestion | Validate and import trusted results without granting test jobs database access | Separate trusted aggregation task after MVP |
 
 These are responsibility boundaries, not requirements for separate packages or services. Start with the smallest implementation that can produce real evidence. Extract reusable orchestration only after repeated execution demonstrates a need.
 
@@ -139,7 +151,7 @@ Callbacks, asynchronous execution, buffers, and lifecycle behavior are later sce
 
 Pin reviewed tool versions and Action commit SHAs. Record SDK package identity and image digest where available. Do not add aarch64 results until that target is actually built or executed; x86_64 success cannot substitute for them.
 
-PR checks validate host code and test definitions. Cross-build checks become required after they are reliable. Runtime starts as a manual experiment and can become scheduled after repeatable success. If runtime is blocked, publish bounded check/link evidence and the blocker; do not introduce self-hosted infrastructure automatically.
+PR checks validate host code and test definitions. Cross-build checks become required after they are reliable. Once the MVP is reproducible, scheduled validation reuses the same CLI and definitions to accumulate history. Runtime starts as a manual experiment and can become scheduled after repeatable success. If runtime is blocked, publish bounded check/link evidence and the blocker; do not introduce self-hosted infrastructure automatically.
 
 ## 11. Evidence, comparison, and upstream triage
 
@@ -151,11 +163,26 @@ A baseline is a versioned selection of trusted prior evidence. Compare results o
 
 Initial triage is manual. Reports should provide a minimal reproduction, exact environment, expected and actual behavior, and diagnostic references. A later export command may draft an upstream issue for human review. Automatic issue submission is outside the initial scope.
 
-## 12. Security and storage
+## 12. Storage evolution and trust boundaries
 
 Untrusted fixture code and Rust build scripts execute only in disposable CI environments with read-only repository permissions and no injected secrets. Do not build untrusted PR code through privileged pull_request_target workflows or grant write permissions to unvalidated artifacts.
 
-Store schema-versioned JSON, Markdown, and necessary logs as workflow artifacts; do not commit every generated run to main. Reports must explain artifact retention limits. Validate and escape public report content, and remove sensitive data from logs before publication.
+Storage follows two stages:
+
+| Stage | Delivery | Persistence and access |
+|---|---|---|
+| 1. MVP: JSON evidence | CLI emits schema-versioned JSON, Markdown, and diagnostic logs; Actions publishes artifacts | No database or backend required; explicitly document artifact expiration |
+| 2. Continuous validation: PostgreSQL | A trusted aggregation task validates archived JSON and imports structured results for historical queries and baseline selection | Provision PostgreSQL and durable original-evidence storage; keep the CLI's execution path independent of both |
+
+Stage 2 integrates PostgreSQL directly, without an intermediate SQLite requirement. JSON remains the portable source evidence, allowing imports to be audited and the query database to be rebuilt. PostgreSQL holds structured runs, scenario outcomes, environment identities, and evidence references. Large logs and binaries remain in artifact or object storage under an explicit retention policy.
+
+Actions artifacts alone are not the long-term evidence archive. Before relying on historical results, choose durable storage for normalized JSON, establish stable identifiers and evidence digests, and define backup, restore, schema migration, and retention procedures. Database records must disclose unavailable or expired diagnostic references.
+
+A backend API is optional at this stage. A trusted aggregation task may connect directly to PostgreSQL to import validated results and generate public reports. Database credentials belong only to that task; untrusted PR builds and fixture execution never receive them. Importing evidence must not execute embedded commands or source code. Use idempotent imports keyed by run/scenario/attempt identity and reject conflicting content so reruns do not overwrite earlier evidence.
+
+Add an ingestion/query API only when concrete requirements, such as external execution nodes or an interactive public query service, justify operating it. Public access can initially use generated reports and exports rather than direct database connections. Separate result execution, trusted ingestion, and publication so community CLI use does not require access to project infrastructure.
+
+Do not commit every generated run to main. Validate and escape public report content, and remove sensitive data from logs before publication.
 
 ## 13. First release acceptance
 
@@ -178,6 +205,8 @@ This gate establishes a usable evidence workflow. It does not certify libc or re
 | ArkTS packaging dominates maintenance | Evaluate a minimal application only after the first evidence workflow is usable |
 | Matrix grows beyond capacity | Add one scenario or dimension at a time, based on user value and measured maintenance effort |
 | Results cannot be compared or reproduced | Preserve exact inputs and environment identity before adding automation |
+| Historical evidence expires or imports lose results | Establish durable JSON storage, idempotent imports, and tested database restore procedures in stage 2 |
+| Infrastructure work exceeds validation value | Expand storage and services around observed query and retention needs; prioritize useful scenarios and upstream fixes |
 
 The next expansion decision is whether napi-ohos integration provides more value than strengthening libc runtime coverage. Make that decision from actual findings and available execution environments. Tokio, reqwest, rusqlite, additional architectures, historical dashboards, and automated baselines remain future candidates without a committed schedule.
 
@@ -185,9 +214,11 @@ The next expansion decision is whether napi-ohos integration provides more value
 
 The active initial scope and execution contracts are defined in the [MVP design](mvp/README.md).
 
-Detailed designs will be written as implementation needs emerge from the MVP experiments.
+Detailed designs will be written as implementation needs emerge from the MVP experiments. The next storage design will cover durable JSON archival and PostgreSQL ingestion; this is outside MVP acceptance.
 
-Open decisions are the project license, the first pinned dependency/toolchain/SDK combination, actual emulator feasibility, and the environment for a later ArkTS application fixture. Resolve these through focused experiments rather than assumed compatibility.
+Project-authored code and documentation use the MIT license. Third-party components retain their respective licenses.
+
+Open decisions are the first pinned dependency/toolchain/SDK combination, actual emulator feasibility, the environment for a later ArkTS application fixture, and stage 2 PostgreSQL hosting, archive storage, and operational ownership. Resolve these through focused experiments rather than assumed compatibility.
 
 ## 16. Tool references
 
