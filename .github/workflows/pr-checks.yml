@@ -1,0 +1,32 @@
+name: PR checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust
+        shell: bash
+        run: |
+          rust_version=$(python3 -c 'import json; print(json.load(open("config/feasibility.json", "rb"))["rust_version"])')
+          rustup toolchain install "$rust_version" --profile minimal --component rustfmt --component clippy
+          rustup override set "$rust_version"
+      - name: Check formatting
+        run: cargo fmt --manifest-path fixtures/libc-file-io/Cargo.toml -- --check
+      - name: Lint fixture
+        run: cargo clippy --locked --manifest-path fixtures/libc-file-io/Cargo.toml -- -D warnings
+      - name: Verify host scenario and failure behavior
+        run: |
+          cargo build --locked --manifest-path fixtures/libc-file-io/Cargo.toml
+          python3 scripts/verify-fixture.py
