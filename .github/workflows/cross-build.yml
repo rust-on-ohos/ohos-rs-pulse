@@ -19,62 +19,34 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Prepare experiment inputs
-        id: inputs
+      - name: Prepare pinned tools
         run: |
-          mkdir -p results/feasibility
-          cp config/feasibility.json results/feasibility/inputs.json
-          python3 - <<'PY'
-          import os, json
-          with open("config/feasibility.json", "rb") as source:
-              inputs = json.load(source)
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              for key, value in inputs.items():
-                  print(f"{key}={value}", file=output)
-          PY
-      - name: Install Rust and cargo-ohos
-        id: tools
-        env:
-          RUST_VERSION: ${{ steps.inputs.outputs.rust_version }}
-          CARGO_OHOS_VERSION: ${{ steps.inputs.outputs.cargo_ohos_version }}
-          OHOS_TARGET: ${{ steps.inputs.outputs.target }}
-        run: |
+          mkdir -p results/feasibility/setup
           {
-            rustup toolchain install "$RUST_VERSION" --profile minimal --target "$OHOS_TARGET"
-            rustup override set "$RUST_VERSION"
-            cargo install cargo-ohos --version "$CARGO_OHOS_VERSION" --locked
-            rustc -Vv
-            cargo --version
-            cargo ohos --version
-          } 2>&1 | tee results/feasibility/tools.log
-      - name: Install candidate SDK
-        id: sdk
+            rust_version=$(jq -r .rust_version config/feasibility.json)
+            target=$(jq -r .target config/feasibility.json)
+            cargo_ohos_version=$(jq -r .cargo_ohos_version config/feasibility.json)
+            rustup toolchain install "$rust_version" --profile minimal --target "$target"
+            cargo install cargo-ohos --version "$cargo_ohos_version" --locked
+            cargo build --locked --bin ohos-pulse
+          } 2>&1 | tee results/feasibility/setup/tools.log
+      - name: Install SDK release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          SDK_RELEASE: ${{ steps.inputs.outputs.sdk_release }}
         run: |
-          cargo ohos init sdk --version "$SDK_RELEASE" --components native 2>&1 | tee results/feasibility/sdk-setup.log
-      - name: Run check and link experiment
-        id: experiment
-        run: python3 scripts/cross-build-experiment.py --output results/feasibility
+          release=$(jq -r .sdk_release config/feasibility.json)
+          cargo ohos init sdk --version "$release" --components native 2>&1 | tee results/feasibility/setup/sdk.log
+      - name: Run Rust check and link
+        run: target/debug/ohos-pulse run --output results/feasibility/build
       - name: Publish summary
         if: always()
-        env:
-          TOOLS_OUTCOME: ${{ steps.tools.outcome }}
-          SDK_OUTCOME: ${{ steps.sdk.outcome }}
-          EXPERIMENT_OUTCOME: ${{ steps.experiment.outcome }}
         run: |
-          if [ -f results/feasibility/summary.md ]; then
-            cat results/feasibility/summary.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f results/feasibility/build/summary.md ]; then
+            cat results/feasibility/build/summary.md >> "$GITHUB_STEP_SUMMARY"
           else
-            {
-              echo '## OHOS cross-build experiment'
-              echo 'No scenario result was produced. Inspect setup logs for infrastructure failures.'
-              echo "Tools: $TOOLS_OUTCOME; SDK: $SDK_OUTCOME; experiment: $EXPERIMENT_OUTCOME."
-              echo 'Runtime and integration were not run.'
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo 'SDK/tool setup did not reach scenario execution. Inspect setup logs; runtime and integration were not run.' >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Upload experiment evidence
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

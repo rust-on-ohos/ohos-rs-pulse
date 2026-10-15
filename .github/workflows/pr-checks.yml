@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  fixture:
+  checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -17,18 +17,16 @@ jobs:
         with:
           persist-credentials: false
       - name: Install pinned Rust
-        shell: bash
+        run: rustup show active-toolchain
+      - name: Check CLI and fixture formatting
         run: |
-          rust_version=$(python3 -c 'import json; print(json.load(open("config/feasibility.json", "rb"))["rust_version"])')
-          rustup toolchain install "$rust_version" --profile minimal --component rustfmt --component clippy
-          rustup override set "$rust_version"
-      - name: Check formatting
-        run: cargo fmt --manifest-path fixtures/libc-file-io/Cargo.toml -- --check
-      - name: Lint fixture
-        run: cargo clippy --locked --manifest-path fixtures/libc-file-io/Cargo.toml -- -D warnings
-      - name: Verify host scenario and failure behavior
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path fixtures/libc-file-io/Cargo.toml -- --check
+      - name: Lint CLI and fixture
         run: |
-          cargo build --locked --manifest-path fixtures/libc-file-io/Cargo.toml
-          python3 scripts/verify-fixture.py
-      - name: Verify runtime evidence acceptance with local transport doubles
-        run: python3 scripts/test-runtime-experiment.py
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --manifest-path fixtures/libc-file-io/Cargo.toml -- -D warnings
+      - name: Test Rust orchestration and host fixture contract
+        run: |
+          cargo test --locked --all-targets
+          cargo test --locked --manifest-path fixtures/libc-file-io/Cargo.toml

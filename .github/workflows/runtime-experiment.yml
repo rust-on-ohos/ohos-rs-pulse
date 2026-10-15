@@ -19,20 +19,16 @@ jobs:
           persist-credentials: false
       - name: Prepare inputs
         run: |
-          mkdir -p results/runtime/build
+          mkdir -p results/runtime
           cp config/*.json results/runtime/
-          python3 - <<'PY'
-          import json, os
-          with open(os.environ['GITHUB_ENV'], 'a') as env:
-              for key, value in json.load(open('config/feasibility.json')).items():
-                  print(f'PULSE_{key.upper()}={value}', file=env)
-          PY
-      - name: Install pinned build tools
+          jq -r 'to_entries[] | "PULSE_\(.key | ascii_upcase)=\(.value)"' config/feasibility.json >> "$GITHUB_ENV"
+          jq -r 'to_entries[] | "PULSE_RUNTIME_\(.key | ascii_upcase)=\(.value)"' config/runtime.json >> "$GITHUB_ENV"
+      - name: Install pinned build tools and Rust CLI
         run: |
           {
             rustup toolchain install "$PULSE_RUST_VERSION" --profile minimal --target "$PULSE_TARGET"
-            rustup override set "$PULSE_RUST_VERSION"
             cargo install cargo-ohos --version "$PULSE_CARGO_OHOS_VERSION" --locked
+            cargo build --locked --bin ohos-pulse
           } 2>&1 | tee results/runtime/tools-setup.log
       - name: Install and verify pinned SDK
         env:
@@ -44,37 +40,22 @@ jobs:
               cd fixtures/libc-file-io
               cargo ohos env -t "$PULSE_TARGET" --format json
             ) > results/runtime/sdk-env.json
-            python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          profile = json.load(open('config/feasibility.json'))
-          sdk = json.load(open('results/runtime/sdk-env.json'))['sdk']
-          assert sdk['version'] == profile['sdk_version']
-          assert sdk['api_version'] == profile['sdk_api_version']
-          toolchains = Path(sdk['native_root']).parent / 'toolchains'
-          assert (toolchains / 'hdc').is_file(), toolchains
-          with open(os.environ['GITHUB_PATH'], 'a') as path:
-              print(toolchains, file=path)
-          PY
+            jq -e --arg version "$PULSE_SDK_VERSION" --argjson api "$PULSE_SDK_API_VERSION" '.sdk.version == $version and .sdk.api_version == $api' results/runtime/sdk-env.json
+            native_root=$(jq -r .sdk.native_root results/runtime/sdk-env.json)
+            toolchains="$(dirname "$native_root")/toolchains"
+            test -f "$toolchains/hdc"
+            echo "$toolchains" >> "$GITHUB_PATH"
           } 2>&1 | tee results/runtime/setup.log
-      - name: Build reviewed fixture
-        run: python3 scripts/cross-build-experiment.py --output results/runtime/build
+      - name: Build reviewed fixture through Rust CLI
+        run: target/debug/ohos-pulse run --output results/runtime/build
       - name: Download and verify pinned image
         run: |
-          python3 - <<'PY'
-          import hashlib, json, os, subprocess
-          from pathlib import Path
-          profile = json.load(open('config/runtime.json'))
-          directory = Path.home() / '.cache/oniro-emulator' / profile['image_release']
-          directory.mkdir(parents=True, exist_ok=True)
-          archive = directory / profile['image_asset']
-          url = f"https://github.com/{profile['image_repository']}/releases/download/{profile['image_release']}/{profile['image_asset']}"
-          subprocess.run(['curl', '-fL', '--max-time', '900', url, '-o', str(archive)], check=True)
-          with archive.open('rb') as source:
-              digest = hashlib.file_digest(source, 'sha256').hexdigest()
-          assert digest == profile['image_sha256'], 'image archive digest mismatch'
-          Path('results/runtime/image-verification.json').write_text(json.dumps({'url': url, 'sha256': digest, 'verified': True}, indent=2) + '\n')
-          PY
+          archive="$HOME/.cache/oniro-emulator/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          mkdir -p "$(dirname "$archive")"
+          url="https://github.com/$PULSE_RUNTIME_IMAGE_REPOSITORY/releases/download/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          curl -fL --max-time 900 "$url" -o "$archive"
+          echo "$PULSE_RUNTIME_IMAGE_SHA256  $archive" | sha256sum --check --strict
+          jq -n --arg url "$url" --arg sha256 "$PULSE_RUNTIME_IMAGE_SHA256" '{url: $url, sha256: $sha256, verified: true}' > results/runtime/image-verification.json
       - name: Fetch reviewed emulator Action
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -84,18 +65,8 @@ jobs:
           persist-credentials: false
       - name: Enforce archive verification immediately before extraction
         run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          profile = json.load(open('config/runtime.json'))
-          action = Path('.runtime-emulator/action.yml')
-          text = action.read_text()
-          needle = '        unzip -q'
-          assert text.count(needle) == 1
-          check = '        echo "' + profile['image_sha256'] + '  $HOME/.cache/oniro-emulator/${ONIRO_EMULATOR_RELEASE}/${ONIRO_EMULATOR_ASSET}" | sha256sum --check --strict\n'
-          # Keep the reviewed launcher; add a digest gate before any archive code runs.
-          action.write_text(text.replace(needle, check + needle))
-          PY
+          test "$(grep -c '^        unzip -q' .runtime-emulator/action.yml)" -eq 1
+          sed -i '/^        unzip -q/i\        echo "$PULSE_RUNTIME_IMAGE_SHA256  $HOME/.cache/oniro-emulator/${ONIRO_EMULATOR_RELEASE}/${ONIRO_EMULATOR_ASSET}" | sha256sum --check --strict' .runtime-emulator/action.yml
       - name: Start pinned Oniro emulator
         id: emulator
         uses: ./.runtime-emulator
@@ -111,72 +82,56 @@ jobs:
           audio: none
       - name: Confirm archive identity after Action setup
         run: |
-          python3 - <<'PY'
-          import hashlib, json
-          from pathlib import Path
-          profile = json.load(open('config/runtime.json'))
-          archive = Path.home() / '.cache/oniro-emulator' / profile['image_release'] / profile['image_asset']
-          with archive.open('rb') as source:
-              assert hashlib.file_digest(source, 'sha256').hexdigest() == profile['image_sha256']
-          PY
-      - name: Execute fixture in guest
-        run: python3 scripts/runtime-experiment.py --build results/runtime/build --output results/runtime/guest
+          archive="$HOME/.cache/oniro-emulator/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          echo "$PULSE_RUNTIME_IMAGE_SHA256  $archive" | sha256sum --check --strict
+      - name: Execute fixture in guest through Rust CLI
+        run: target/debug/ohos-pulse runtime --build results/runtime/build --output results/runtime/guest
       - name: Stop emulator and preserve diagnostics
         if: always()
         run: |
-          python3 - <<'PY'
-          import json, os, signal, subprocess, time
-          from pathlib import Path
-          directory = Path('results/runtime')
-          directory.mkdir(parents=True, exist_ok=True)
-          processes = subprocess.run(['pgrep', '-x', 'qemu-system-x86'], capture_output=True, text=True)
-          # Ubuntu's process comm field truncates qemu-system-x86_64 to 15 bytes.
-          stopped = []
-          for raw in processes.stdout.split():
-              pid = int(raw)
-              try:
-                  os.kill(pid, signal.SIGTERM)
-                  stopped.append(pid)
-              except ProcessLookupError:
-                  pass
-          deadline = time.monotonic() + 10
-          while time.monotonic() < deadline and any(Path(f'/proc/{pid}').exists() for pid in stopped):
-              time.sleep(0.2)
-          killed = []
-          for pid in stopped:
-              if Path(f'/proc/{pid}').exists():
-                  try:
-                      os.kill(pid, signal.SIGKILL)
-                      killed.append(pid)
-                  except ProcessLookupError:
-                      pass
-          (directory / 'emulator-teardown.json').write_text(json.dumps({'terminated': stopped, 'killed': killed}) + '\n')
-          log = Path('/tmp/oniro-emulator.log')
-          if log.exists():
-              (directory / 'emulator.log').write_bytes(log.read_bytes())
-          PY
+          mkdir -p results/runtime
+          pgrep -x qemu-system-x86 > results/runtime/emulator-pids.txt || true
+          terminated='[]'
+          killed='[]'
+          while read -r pid; do
+            if kill -TERM "$pid" 2>/dev/null; then
+              terminated=$(jq -c --argjson pid "$pid" '. + [$pid]' <<< "$terminated")
+            fi
+          done < results/runtime/emulator-pids.txt
+          for _ in {1..50}; do
+            alive=false
+            while read -r pid; do
+              if kill -0 "$pid" 2>/dev/null; then alive=true; fi
+            done < results/runtime/emulator-pids.txt
+            if [ "$alive" = false ]; then break; fi
+            sleep 0.2
+          done
+          while read -r pid; do
+            if kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null; then
+              killed=$(jq -c --argjson pid "$pid" '. + [$pid]' <<< "$killed")
+            fi
+          done < results/runtime/emulator-pids.txt
+          jq -n --argjson terminated "$terminated" --argjson killed "$killed" '{terminated: $terminated, killed: $killed}' > results/runtime/emulator-teardown.json
+          if [ -f /tmp/oniro-emulator.log ]; then cp /tmp/oniro-emulator.log results/runtime/emulator.log; fi
       - name: Publish outcome
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
           EMULATOR_OUTCOME: ${{ steps.emulator.outcome }}
         run: |
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          summary = Path('results/runtime/guest/summary.md')
-          if summary.exists():
-              text = summary.read_text()
-          else:
-              result = {'format': 'ohos-pulse-runtime-setup-1', 'runtime': {'status': 'infra_error', 'reason': 'setup/build/emulator did not reach guest execution'}, 'job_status': os.environ['JOB_STATUS'], 'emulator_outcome': os.environ['EMULATOR_OUTCOME']}
-              build = Path('results/runtime/build/experiment.json')
-              if build.exists() and json.loads(build.read_text())['stages']['link']['status'] != 'passed':
-                  result['runtime'] = {'status': 'blocked', 'reason': 'link did not pass; see build/experiment.json'}
-              Path('results/runtime/setup-outcome.json').write_text(json.dumps(result, indent=2) + '\n')
-              text = '# OHOS runtime experiment\n\nRuntime infrastructure did not reach guest execution. Inspect setup/build/emulator diagnostics.\n\nSDK provenance verification is unresolved.\n'
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
-              out.write(text)
-          PY
+          if [ -f results/runtime/guest/summary.md ]; then
+            cat results/runtime/guest/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            status=infra_error
+            reason='setup or emulator did not reach guest execution'
+            if [ -f results/runtime/build/run.json ] && ! jq -e '.stages.link.status == "passed"' results/runtime/build/run.json > /dev/null; then
+              status=blocked
+              reason='link did not pass; inspect build/run.json'
+            fi
+            jq -n --arg status "$status" --arg reason "$reason" --arg job "$JOB_STATUS" --arg emulator "$EMULATOR_OUTCOME" '{format: "ohos-pulse-runtime-setup-1", runtime: {status: $status, reason: $reason}, job_status: $job, emulator_outcome: $emulator}' > results/runtime/setup-outcome.json
+            echo "Runtime: $status. $reason. SDK provenance verification remains unresolved." >> "$GITHUB_STEP_SUMMARY"
+            if [ -f results/runtime/build/summary.md ]; then cat results/runtime/build/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+          fi
       - name: Upload complete experiment evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

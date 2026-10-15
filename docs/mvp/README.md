@@ -1,12 +1,16 @@
-# ohos-rs Pulse — MVP Design
+# ohos-rs Pulse — MVP
 
-**Status:** Draft  
-**Date:** 2026-10-14
+The MVP establishes one reproducible evidence workflow for one libc file I/O
+scenario on one OpenHarmony target. The Rust CLI now owns the execution path;
+GitHub Actions provisions tools/SDK and the emulator. Python has been removed.
 
-The MVP establishes one reproducible evidence workflow for one libc file I/O scenario on one OpenHarmony target. It delivers a small `ohos-pulse` CLI, GitHub Actions workflows, and the fixture they execute.
+Read the [CLI usage](../../README.md), [implemented result protocol](result-protocol.md)
+and [runtime experiment](runtime-experiment.md). The [MVP design](design.md)
+remains the broader design reference; its initial TOML and standalone JSON Schema
+proposals have not been implemented. The CLI currently consumes the existing
+typed JSON build/runtime profiles and validates result semantics in Rust.
 
-Read the [MVP design](design.md) for scope, behavior, evidence, and acceptance. The [HLD](../high-level-design.md) defines the broader architectural direction. Additional detailed designs will be written when the MVP experiments establish a concrete need.
-
-No commands or compatibility outcomes in this design are claims of implemented functionality. Exact dependency, SDK, and tool versions remain open until the feasibility experiment records them.
-
-The [runtime feasibility experiment](runtime-experiment.md) describes the verified build baseline and manual guest execution workflow.
+Historical Python experiments established real hosted check/link and one runtime
+success. Rust tests validate orchestration locally; new hosted runtime attempts
+must establish replacement behavior and repeatability. ArkTS, PostgreSQL and
+SDK archive provenance verification remain deferred/open as documented.
