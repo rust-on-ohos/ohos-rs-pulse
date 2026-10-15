@@ -1,0 +1,5 @@
+ Downloading crates ...
+  Downloaded libc v0.2.190
+   Compiling libc v0.2.190
+    Checking libc-file-io v0.1.0 (/home/runner/work/ohos-rs-pulse/ohos-rs-pulse/fixtures/libc-file-io)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.89s

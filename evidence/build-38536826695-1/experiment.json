@@ -1,0 +1,235 @@
+{
+  "format": "ohos-pulse-feasibility-1",
+  "note": "Experimental evidence; not the proposed CLI result-v1 schema.",
+  "timestamp_utc": "2026-10-14T08:42:37.135344+00:00",
+  "source_commit": "37cdb7333d7b93f2bf980a0e43391293cf8039fc",
+  "source_dirty": false,
+  "host": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "ci_run_id": "38536826695",
+  "ci_run_attempt": "1",
+  "inputs": {
+    "rust_version": "1.99.0",
+    "cargo_ohos_version": "0.3.4",
+    "sdk_release": "6.1",
+    "target": "x86_64-unknown-linux-ohos"
+  },
+  "subject": {
+    "fixture_id": "libc-file-io",
+    "scenario_id": "file-round-trip",
+    "source": "crates.io"
+  },
+  "sdk_and_tools": {
+    "cargo_ohos_version": "0.3.4",
+    "env": {
+      "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_linux_ohos": "--target=x86_64-linux-ohos --sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot -D__MUSL__ -I/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot/usr/include/x86_64-linux-ohos",
+      "CARGO_ENCODED_RUSTFLAGS": "-Clink-arg=-fuse-ld=lld\u001f-Clink-arg=-Wl,--build-id\u001f-Clink-arg=--target=x86_64-linux-ohos\u001f-Clink-arg=--sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot\u001f-Clink-arg=-D__MUSL__",
+      "CARGO_OHOS_API_LEVEL": "23",
+      "CARGO_OHOS_CLANG_TRIPLE": "x86_64-linux-ohos",
+      "CARGO_OHOS_SDK_NATIVE": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native",
+      "CARGO_OHOS_SYSROOT": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+      "CARGO_TARGET_X86_64_UNKNOWN_LINUX_OHOS_LINKER": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang",
+      "CC_x86_64-unknown-linux-ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang",
+      "CC_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang",
+      "CLANG_PATH": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang++",
+      "CMAKE": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/build-tools/cmake/bin/cmake",
+      "CMAKE_CXX_COMPILER_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang++",
+      "CMAKE_C_COMPILER_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang",
+      "CMAKE_GENERATOR_x86_64_unknown_linux_ohos": "Ninja",
+      "CMAKE_TOOLCHAIN_FILE_x86_64_unknown_linux_ohos": "/home/runner/work/ohos-rs-pulse/ohos-rs-pulse/fixtures/libc-file-io/target/ohos-toolchain/x86_64-linux-ohos-ed0a11fed3af/ohos.toolchain.cmake",
+      "CXXSTDLIB_x86_64_unknown_linux_ohos": "c++",
+      "CXX_x86_64-unknown-linux-ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang++",
+      "CXX_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang++",
+      "LIBCLANG_PATH": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/lib",
+      "OHOS_SDK_NATIVE": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native",
+      "PKG_CONFIG_PATH_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot/usr/lib/pkgconfig:/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot/usr/share/pkgconfig",
+      "PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_ohos": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+      "TARGET_AR": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-ar",
+      "TARGET_CFLAGS": "--target=x86_64-linux-ohos --sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot -D__MUSL__",
+      "TARGET_CPPFLAGS": "--target=x86_64-linux-ohos --sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot -D__MUSL__",
+      "TARGET_CXXFLAGS": "--target=x86_64-linux-ohos --sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot -D__MUSL__",
+      "TARGET_OBJCOPY": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-objcopy",
+      "TARGET_RANLIB": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-ranlib",
+      "TARGET_READELF": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-readelf",
+      "TARGET_STRIP": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-strip"
+    },
+    "flags": {
+      "bindgen": [
+        "--target=x86_64-linux-ohos",
+        "--sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+        "-D__MUSL__",
+        "-I/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot/usr/include/x86_64-linux-ohos"
+      ],
+      "cflags": [
+        "--target=x86_64-linux-ohos",
+        "--sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+        "-D__MUSL__"
+      ],
+      "cxxflags": [
+        "--target=x86_64-linux-ohos",
+        "--sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+        "-D__MUSL__"
+      ],
+      "ldflags": [
+        "-fuse-ld=lld",
+        "-Wl,--build-id"
+      ],
+      "rustflags": [
+        "-Clink-arg=-fuse-ld=lld",
+        "-Clink-arg=-Wl,--build-id",
+        "-Clink-arg=--target=x86_64-linux-ohos",
+        "-Clink-arg=--sysroot=/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+        "-Clink-arg=-D__MUSL__"
+      ]
+    },
+    "runtime_libraries": [],
+    "schema_version": 1,
+    "sdk": {
+      "api_version": 23,
+      "cmake": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/build-tools/cmake/bin/cmake",
+      "cmake_toolchain_file": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/build/cmake/ohos.toolchain.cmake",
+      "llvm_bin": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin",
+      "llvm_root": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm",
+      "native_root": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native",
+      "ninja": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/build-tools/cmake/bin/ninja",
+      "sysroot": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/sysroot",
+      "version": "6.1.0.31"
+    },
+    "target": {
+      "arch": "x86_64",
+      "clang_triple": "x86_64-linux-ohos",
+      "lib_dir": "x86_64-linux-ohos",
+      "rust_triple": "x86_64-unknown-linux-ohos"
+    },
+    "toolchain": {
+      "ar": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-ar",
+      "clang": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang",
+      "clangxx": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/clang++",
+      "external": false,
+      "libclang_dir": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/lib",
+      "objcopy": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-objcopy",
+      "ranlib": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-ranlib",
+      "readelf": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-readelf",
+      "root": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm",
+      "strip": "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-strip"
+    }
+  },
+  "preflight": {
+    "status": "passed",
+    "command": [
+      "cargo",
+      "ohos",
+      "env",
+      "-t",
+      "x86_64-unknown-linux-ohos",
+      "--format",
+      "json"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 32,
+    "stdout": "preflight.stdout.log",
+    "stderr": "preflight.stderr.log"
+  },
+  "metadata": {
+    "status": "passed",
+    "command": [
+      "cargo",
+      "metadata",
+      "--locked",
+      "--format-version",
+      "1"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 64,
+    "stdout": "cargo-metadata.stdout.log",
+    "stderr": "cargo-metadata.stderr.log"
+  },
+  "rust": {
+    "status": "passed",
+    "command": [
+      "rustc",
+      "-Vv"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 16,
+    "stdout": "rustc-version.stdout.log",
+    "stderr": "rustc-version.stderr.log"
+  },
+  "cargo": {
+    "status": "passed",
+    "command": [
+      "cargo",
+      "--version"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 16,
+    "stdout": "cargo-version.stdout.log",
+    "stderr": "cargo-version.stderr.log"
+  },
+  "stages": {
+    "runtime": {
+      "status": "not_run",
+      "reason": "build-only feasibility experiment"
+    },
+    "integration": {
+      "status": "not_run",
+      "reason": "outside MVP scope"
+    },
+    "check": {
+      "status": "passed",
+      "command": [
+        "cargo",
+        "ohos",
+        "check",
+        "-t",
+        "x86_64-unknown-linux-ohos",
+        "--locked",
+        "--bin",
+        "libc-file-io",
+        "--target-dir",
+        "/home/runner/work/ohos-rs-pulse/ohos-rs-pulse/results/feasibility/build"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 966,
+      "stdout": "check.stdout.log",
+      "stderr": "check.stderr.log"
+    },
+    "link": {
+      "status": "passed",
+      "command": [
+        "cargo",
+        "ohos",
+        "build",
+        "-t",
+        "x86_64-unknown-linux-ohos",
+        "--locked",
+        "--bin",
+        "libc-file-io",
+        "--target-dir",
+        "/home/runner/work/ohos-rs-pulse/ohos-rs-pulse/results/feasibility/build"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 766,
+      "stdout": "link.stdout.log",
+      "stderr": "link.stderr.log"
+    }
+  },
+  "artifact": {
+    "path": "artifacts/libc-file-io",
+    "sha256": "ab618b698b37eeb3a859a07e282833acd36b155367501c06d1b13c3666ac0ef2",
+    "architecture": "x86_64",
+    "inspection": {
+      "status": "passed",
+      "command": [
+        "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native/llvm/bin/llvm-readelf",
+        "-h",
+        "-l",
+        "-d",
+        "/home/runner/work/ohos-rs-pulse/ohos-rs-pulse/results/feasibility/artifacts/libc-file-io"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 4,
+      "stdout": "artifact-inspection.stdout.log",
+      "stderr": "artifact-inspection.stderr.log"
+    }
+  }
+}

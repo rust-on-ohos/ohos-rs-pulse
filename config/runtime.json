@@ -1,0 +1,13 @@
+{
+  "distribution": "Oniro",
+  "emulator_action": "07afed5305e89fbdac4f6e8a5560e61e3dcb77ae",
+  "image_repository": "eclipse-oniro4openharmony/device_board_oniro",
+  "image_release": "v6.1",
+  "image_asset": "oniro_emulator.zip",
+  "image_asset_id": 390845165,
+  "image_sha256": "a30e01f1b161e0fdcd91263f30f29cc92bfa49c1776d5ee2c46caefef055b2da",
+  "connect_key": "127.0.0.1:55555",
+  "guest_base": "/data/local/tmp",
+  "execution_timeout_seconds": 60,
+  "transport_timeout_seconds": 30
+}

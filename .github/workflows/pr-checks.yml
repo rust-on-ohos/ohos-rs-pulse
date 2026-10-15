@@ -30,3 +30,5 @@ jobs:
         run: |
           cargo build --locked --manifest-path fixtures/libc-file-io/Cargo.toml
           python3 scripts/verify-fixture.py
+      - name: Verify runtime evidence acceptance with local transport doubles
+        run: python3 scripts/test-runtime-experiment.py

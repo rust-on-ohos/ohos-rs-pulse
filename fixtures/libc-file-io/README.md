@@ -38,7 +38,7 @@ On 2026-10-14, host lint/execution and x86_64 OHOS check/link succeeded with:
 
 The experiment used offline locked Cargo commands. It also verified cleanup after success, preservation of a preexisting file, rejection of an invalid run ID, and failure for a missing directory.
 
-These are local development observations, not a normalized CI result or validation of the proposed SDK 6.1 environment. OHOS runtime execution and GitHub-hosted check/link have not yet been verified. The next experiment must pin a CI-available SDK and record its actual identity before these results can be compared.
+These are local development observations, not a normalized CI result or validation of the proposed SDK 6.1 environment. OHOS runtime execution remains unverified. GitHub-hosted check/link subsequently passed with SDK 6.1.0.31 / API 23; see the [first hosted build evidence](../../evidence/build-38536826695-1/README.md). The next experiment must pin a CI-available SDK and record its actual identity before these results can be compared.
 
 ## CI feasibility workflows
 
@@ -54,4 +54,6 @@ Prerequisites are Python 3.9 or newer, the configured Rust version and target, c
 
 Outputs include `experiment.json`, `summary.md`, separate command logs, fixture source/lockfile copies, Cargo dependency metadata, ELF inspection, and the executable. This is explicitly a feasibility evidence format, not the proposed CLI result-v1 schema. Runtime and integration remain `not_run`. Check/link each have a ten-minute timeout and failed check blocks link. Logs and summary are uploaded even after a failing experiment; setup failures have workflow diagnostics without an invented scenario result.
 
-GitHub artifacts are retained for 14 days. After pushing these files, inspect the first workflow run's setup logs, summary, and downloadable artifact. Until that run completes, hosted build feasibility remains unverified. The SDK release selector is a candidate input; the first successful run must establish exact package identity before promoting it to a baseline.
+GitHub artifacts are retained for 14 days. The first hosted run passed; its selected evidence is preserved in the repository. The build script now rejects SDK versions/APIs different from 6.1.0.31 / API 23. The SDK release selector is a candidate input; the first successful run must establish exact package identity before promoting it to a baseline.
+
+See the [manual runtime experiment](../../docs/mvp/runtime-experiment.md) for guest execution and evidence boundaries.

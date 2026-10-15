@@ -72,6 +72,8 @@ if preflight["status"] == "passed":
         environment = json.loads((output / preflight["stdout"]).read_text())
         if environment["cargo_ohos_version"] != inputs["cargo_ohos_version"]:
             raise ValueError("cargo-ohos version differs from the experiment pin")
+        if environment["sdk"]["version"] != inputs["sdk_version"] or environment["sdk"]["api_version"] != inputs["sdk_api_version"]:
+            raise ValueError("SDK version/API differs from the verified baseline")
         readelf = Path(environment["toolchain"]["readelf"])
         if not readelf.is_file():
             raise ValueError("SDK readelf tool is unavailable")

@@ -1,0 +1,13 @@
+note: installing OpenHarmony SDK 6.1
+note: `gh` is not authenticated; skipping GitHub artifact attestation verification
+note: downloading asset `ohos-sdk-windows_linux-public.tar.gz.aa`
+note: downloading asset `ohos-sdk-windows_linux-public.tar.gz.ab`
+note: extracting /home/runner/.cache/cargo-ohos/ohos-sdk/.download-sdk-6.1-linux.tar.gz
+OpenHarmony SDK 6.1.0.31 (API 23) installed at:
+  /home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native
+
+cargo-ohos will pick this up on its own. To point other tools at it:
+  add to your shell profile: export OHOS_SDK_NATIVE="/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native"
+
+Or pass it on each invocation with:
+  cargo ohos build --sdk "/home/runner/.cache/cargo-ohos/ohos-sdk/6.1/linux/23/native"
