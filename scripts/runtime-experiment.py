@@ -83,7 +83,8 @@ class Experiment:
         text = self.hdc(name, "shell", wrapped, timeout=timeout)
         match = re.search(r"(?:^|\n)" + marker + r":([0-9]+)\s*$", text)
         if not match or int(match[1]) != 0:
-            raise InfrastructureError(name + " remote command failed or status marker missing")
+            detail = "status marker missing" if not match else "guest exit code " + match[1]
+            raise InfrastructureError(name + ": " + detail + "; inspect " + name + ".stdout.log and " + name + ".stderr.log")
         return text[:match.start()].strip()
 
     def receive(self, remote, local):
@@ -108,7 +109,11 @@ class Experiment:
             self.command("hdc-version", ["hdc", "-v"])
             self.command("targets", ["hdc", "list", "targets"])
             self.result["guest_identity"] = self.shell("guest-identity", "uname -a; id; param get const.ohos.fullname; param get const.product.software.version")
-            self.shell("guest-prerequisites", "test -r /lib/ld-musl-x86_64.so.1 && test -r /lib/libc.so && test -d /data/local/tmp && test -w /data/local/tmp")
+            self.shell("guest-paths", "for p in /lib /lib64 /system/lib /system/lib64 /data/local /data/local/tmp; do echo \"PATH: $p\"; ls -ld \"$p\"; done; "
+                       "find /lib /lib64 /system/lib /system/lib64 -name libc.so -o -name 'ld-musl*' 2>/dev/null; true")
+            self.shell("guest-loader", "test -r /lib/ld-musl-x86_64.so.1 || { echo 'Required ELF interpreter is unavailable' >&2; exit 1; }")
+            base = shlex.quote(self.config["guest_base"])
+            self.shell("guest-writable-base", "mkdir -p " + base + " && test -d " + base + " && test -w " + base)
             # A deliberately nonzero child proves that the remote status channel works.
             probe = self.shell("exit-probe", "sh -c 'exit 37'; rc=$?; test \"$rc\" -eq 37 && echo PULSE-EXIT-37")
             if probe != "PULSE-EXIT-37":
@@ -118,6 +123,8 @@ class Experiment:
             created = True
             self.hdc("deploy", "file", "send", str(binary), self.directory + "/fixture")
             self.shell("chmod", "chmod 700 " + directory + "/fixture")
+            # Resolve NEEDED entries through the guest loader instead of assuming a libc path.
+            self.result["guest_dependencies"] = self.shell("guest-dependencies", "/lib/ld-musl-x86_64.so.1 --list " + directory + "/fixture")
             # Redirect inside the guest to preserve stdout/stderr separately. Store the
             # actual child status rather than trusting hdc's process return code.
             script = (f"cd {directory} || exit 1; ./fixture . {shlex.quote(self.run_id)} >stdout 2>stderr & "
@@ -168,6 +175,7 @@ class Experiment:
             temporary.replace(self.output / "runtime.json")
             summary = ("# Oniro runtime feasibility\n\n"
                        f"Runtime: `{self.result['runtime']['status']}`; run ID: `{self.run_id}`.\n\n"
+                       f"Reason: {self.result['runtime'].get('reason', 'acceptance criteria satisfied')}.\n\n"
                        "Scope: libc file-round-trip in the recorded Oniro guest; no ArkTS integration.\n\n"
                        "See runtime.json and command logs for status, identity, cleanup and diagnostics.\n\n"
                        "SDK archive provenance verification is unresolved. Evidence retention: 14 days.\n")

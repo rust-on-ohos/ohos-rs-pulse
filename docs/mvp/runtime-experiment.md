@@ -21,8 +21,11 @@ startup and after Action completion. Cache restoration cannot bypass the gate.
 The upstream Action's optional cache dependency is selected by its upstream tag.
 
 The guest kernel, OS build properties, process identity, hdc version and target
-listing are logged. Preconditions include `/lib/ld-musl-x86_64.so.1`,
-`/lib/libc.so` and a writable `/data/local/tmp`. The archive identity is distinct
+listing are logged. Preconditions include `/lib/ld-musl-x86_64.so.1`
+and a writable `/data/local/tmp`, created when absent. Guest path diagnostics
+record library locations; the guest loader's `--list` checks the deployed
+executable's actual dependencies rather than assuming `/lib/libc.so` exists.
+The archive identity is distinct
 from observed guest OS properties; neither implies compatibility with all OHOS
 devices. The original image is booted with disposable writable disks.
 

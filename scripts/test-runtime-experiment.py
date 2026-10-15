@@ -19,9 +19,13 @@ spec.loader.exec_module(runtime)
 class LocalTransport(runtime.Experiment):
     fail_receive = False
     fail_cleanup = False
+    fail_remote = None
 
     def hdc(self, name, *args, timeout=None):
-        if name in ('guest-identity', 'guest-prerequisites'):
+        if name == self.fail_remote:
+            marker = args[1].split('PULSE-SHELL-')[1].split(':')[0]
+            return '\nPULSE-SHELL-' + marker + ':1\n'
+        if name in ('guest-identity', 'guest-paths', 'guest-loader', 'guest-dependencies'):
             # Platform checks require a real guest; test only the transport protocol here.
             marker = args[1].split('PULSE-SHELL-')[1].split(':')[0]
             return '\nPULSE-SHELL-' + marker + ':0\n'
@@ -93,6 +97,19 @@ class RuntimeTests(unittest.TestCase):
     def test_timeout_cannot_pass(self):
         result = self.run_case('sleep 20\n')
         self.assertEqual(result['runtime']['status'], 'timed_out')
+
+    def test_missing_loader_is_identified(self):
+        result = self.run_case('exit 0\n', fail_remote='guest-loader')
+        self.assertEqual(result['runtime']['status'], 'infra_error')
+        self.assertIn('guest-loader: guest exit code 1', result['runtime']['reason'])
+        self.assertEqual(result['cleanup']['status'], 'not_run')
+
+    def test_unresolved_dependencies_block_execution(self):
+        result = self.run_case('exit 0\n', fail_remote='guest-dependencies')
+        self.assertEqual(result['runtime']['status'], 'infra_error')
+        self.assertIn('guest-dependencies', result['runtime']['reason'])
+        self.assertEqual(result['cleanup']['status'], 'passed')
+        self.assertFalse(any(command['name'] == 'execute' for command in result['commands']))
 
 
 if __name__ == '__main__':
