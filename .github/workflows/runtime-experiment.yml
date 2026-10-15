@@ -33,7 +33,7 @@ jobs:
             rustup toolchain install "$PULSE_RUST_VERSION" --profile minimal --target "$PULSE_TARGET"
             rustup override set "$PULSE_RUST_VERSION"
             cargo install cargo-ohos --version "$PULSE_CARGO_OHOS_VERSION" --locked
-            cargo ohos init sdk --version "$PULSE_SDK_VERSION" --components native,toolchains
+            cargo ohos init sdk --version "$PULSE_SDK_RELEASE" --components native,toolchains
             cargo ohos env -t "$PULSE_TARGET" --format json > results/runtime/sdk-env.json
             python3 - <<'PY'
           import json, os
