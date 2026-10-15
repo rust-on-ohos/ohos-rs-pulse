@@ -34,7 +34,10 @@ jobs:
             rustup override set "$PULSE_RUST_VERSION"
             cargo install cargo-ohos --version "$PULSE_CARGO_OHOS_VERSION" --locked
             cargo ohos init sdk --version "$PULSE_SDK_RELEASE" --components native,toolchains
-            cargo ohos env -t "$PULSE_TARGET" --format json > results/runtime/sdk-env.json
+            (
+              cd fixtures/libc-file-io
+              cargo ohos env -t "$PULSE_TARGET" --format json
+            ) > results/runtime/sdk-env.json
             python3 - <<'PY'
           import json, os
           from pathlib import Path
