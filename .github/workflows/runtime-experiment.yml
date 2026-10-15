@@ -27,12 +27,18 @@ jobs:
               for key, value in json.load(open('config/feasibility.json')).items():
                   print(f'PULSE_{key.upper()}={value}', file=env)
           PY
-      - name: Install pinned build tools and SDK
+      - name: Install pinned build tools
         run: |
           {
             rustup toolchain install "$PULSE_RUST_VERSION" --profile minimal --target "$PULSE_TARGET"
             rustup override set "$PULSE_RUST_VERSION"
             cargo install cargo-ohos --version "$PULSE_CARGO_OHOS_VERSION" --locked
+          } 2>&1 | tee results/runtime/tools-setup.log
+      - name: Install and verify pinned SDK
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          {
             cargo ohos init sdk --version "$PULSE_SDK_RELEASE" --components native,toolchains
             (
               cd fixtures/libc-file-io

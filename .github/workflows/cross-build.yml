@@ -50,6 +50,7 @@ jobs:
       - name: Install candidate SDK
         id: sdk
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SDK_RELEASE: ${{ steps.inputs.outputs.sdk_release }}
         run: |
           cargo ohos init sdk --version "$SDK_RELEASE" --components native 2>&1 | tee results/feasibility/sdk-setup.log
