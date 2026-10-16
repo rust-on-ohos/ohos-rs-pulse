@@ -31,12 +31,12 @@ pub fn completion_matches(stdout: &str, id: &str) -> bool {
         .is_ok_and(|r| r.scenario_id == "file-round-trip" && r.run_id == id && r.status == "passed")
 }
 
-struct Guest<'a> {
-    executor: &'a mut Executor,
-    config: &'a RuntimeConfig,
+pub(crate) struct Guest<'a> {
+    pub(crate) executor: &'a mut Executor,
+    pub(crate) config: &'a RuntimeConfig,
 }
 impl Guest<'_> {
-    fn hdc(&mut self, name: &str, values: &[&str], timeout: u64) -> Result<String> {
+    pub(crate) fn hdc(&mut self, name: &str, values: &[&str], timeout: u64) -> Result<String> {
         let mut command = args(&["hdc", "-t", &self.config.connect_key]);
         command.extend(args(values));
         let record = self
@@ -51,7 +51,7 @@ impl Guest<'_> {
         );
         self.executor.stdout(&record)
     }
-    fn shell(&mut self, name: &str, script: &str, timeout: u64) -> Result<String> {
+    pub(crate) fn shell(&mut self, name: &str, script: &str, timeout: u64) -> Result<String> {
         let marker = format!("PULSE-SHELL-{}", uuid::Uuid::new_v4().simple());
         let wrapped = format!(
             "sh -c {}",
@@ -67,7 +67,7 @@ impl Guest<'_> {
         );
         Ok(body)
     }
-    fn receive(&mut self, directory: &str, name: &str) -> Result<()> {
+    pub(crate) fn receive(&mut self, directory: &str, name: &str) -> Result<()> {
         let local = self.executor.output.join(format!("logs/guest-{name}.log"));
         self.hdc(
             &format!("receive-{name}"),

@@ -1,4 +1,6 @@
-# ohos-rs Pulse
+# ohos-rs-pulse
+
+Follow-up improvements and expansion gates are tracked in [TODO.md](TODO.md).
 
 A Rust CLI and reviewed fixtures for reproducible OpenHarmony compatibility evidence.
 The current scope is one upstream libc file-round-trip scenario on

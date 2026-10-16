@@ -1,0 +1,12 @@
+{
+  "repository": "rust-lang/libc",
+  "version": "0.2.190",
+  "commit": "7b0ab5528dc7f361f3a0b4c06c2cad9971617f75",
+  "lockfile_sha256": "915160ea012c1611f9550c79ab69f460616c22e69b5f649403ada6c4a58c5b75",
+  "package": "libc-test",
+  "test": "ctest",
+  "generator_version": "0.5.1",
+  "generator_template_sha256": "898fd73091c473df2529aaeaf073b9ebf7bc510a4c36c1ff1652420e9de229fb",
+  "build_timeout_seconds": 900,
+  "execution_timeout_seconds": 120
+}

@@ -3,6 +3,7 @@ mod config;
 mod process;
 mod report;
 mod runtime;
+mod upstream;
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
@@ -16,7 +17,7 @@ use std::{
 #[command(
     name = "ohos-pulse",
     version,
-    about = "Reproducible evidence for one OHOS libc scenario"
+    about = "Reproducible OHOS build and runtime evidence"
 )]
 struct Cli {
     #[arg(long, default_value = ".", global = true)]
@@ -26,6 +27,20 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Commands {
+    /// Compile the reviewed upstream libc ctest target without running it.
+    UpstreamBuild {
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Run an upstream ctest build in the provisioned OH guest.
+    UpstreamRuntime {
+        #[arg(long)]
+        build: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Check and link the reviewed fixture, optionally execute on a provisioned guest.
     Run {
         #[arg(long)]
@@ -79,6 +94,21 @@ fn rebase(command: &mut report::CommandRecord) {
 fn execute(cli: Cli) -> Result<i32> {
     let root = cli.root.canonicalize()?;
     match cli.command {
+        Commands::UpstreamBuild { source, output } => {
+            let config = upstream::load_config(&root)?;
+            let source = source.canonicalize()?;
+            let output = fresh_output(&output)?;
+            upstream::build(&root, &source, &output, config)
+        }
+        Commands::UpstreamRuntime { build, output } => {
+            let build = build.canonicalize()?;
+            let output = fresh_output(&output)?;
+            ensure!(
+                !output.starts_with(&build) && !build.starts_with(&output),
+                "build/output directories overlap"
+            );
+            upstream::runtime(&root, &build, &output)
+        }
         Commands::Run {
             output,
             runtime: requested,

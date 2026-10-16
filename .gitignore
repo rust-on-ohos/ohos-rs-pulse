@@ -11,3 +11,6 @@ target/
 .env
 .env.*
 !.env.example
+
+# Disposable upstream source checkout for the manual ABI experiment
+/.upstream-libc/

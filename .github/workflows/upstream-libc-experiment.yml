@@ -1,0 +1,151 @@
+name: Upstream libc ABI experiment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Prepare inputs
+        id: inputs
+        run: |
+          mkdir -p results/upstream-libc
+          cp config/*.json results/upstream-libc/
+          echo "commit=$(jq -r .commit config/upstream-libc.json)" >> "$GITHUB_OUTPUT"
+          jq -r 'to_entries[] | "PULSE_\(.key | ascii_upcase)=\(.value)"' config/feasibility.json >> "$GITHUB_ENV"
+          jq -r 'to_entries[] | "PULSE_RUNTIME_\(.key | ascii_upcase)=\(.value)"' config/runtime.json >> "$GITHUB_ENV"
+      - name: Fetch reviewed upstream libc source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: rust-lang/libc
+          ref: ${{ steps.inputs.outputs.commit }}
+          path: .upstream-libc
+          persist-credentials: false
+      - name: Install pinned build tools and Rust CLI
+        run: |
+          {
+            rustup toolchain install "$PULSE_RUST_VERSION" --profile minimal --target "$PULSE_TARGET"
+            cargo install cargo-ohos --version "$PULSE_CARGO_OHOS_VERSION" --locked
+            cargo build --locked --bin ohos-pulse
+          } 2>&1 | tee results/upstream-libc/tools-setup.log
+      - name: Install and verify pinned SDK
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          {
+            cargo ohos init sdk --version "$PULSE_SDK_RELEASE" --components native,toolchains
+            (
+              cd .upstream-libc
+              cargo ohos env -t "$PULSE_TARGET" --format json
+            ) > results/upstream-libc/sdk-env.json
+            jq -e --arg version "$PULSE_SDK_VERSION" --argjson api "$PULSE_SDK_API_VERSION" '.sdk.version == $version and .sdk.api_version == $api' results/upstream-libc/sdk-env.json
+            native_root=$(jq -r .sdk.native_root results/upstream-libc/sdk-env.json)
+            toolchains="$(dirname "$native_root")/toolchains"
+            test -f "$toolchains/hdc"
+            echo "$toolchains" >> "$GITHUB_PATH"
+          } 2>&1 | tee results/upstream-libc/setup.log
+      - name: Build selected upstream test through Rust CLI
+        run: target/debug/ohos-pulse upstream-build --source .upstream-libc --output results/upstream-libc/build
+      - name: Download and verify pinned image
+        run: |
+          archive="$HOME/.cache/oniro-emulator/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          mkdir -p "$(dirname "$archive")"
+          url="https://github.com/$PULSE_RUNTIME_IMAGE_REPOSITORY/releases/download/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          curl -fL --max-time 900 "$url" -o "$archive"
+          echo "$PULSE_RUNTIME_IMAGE_SHA256  $archive" | sha256sum --check --strict
+          jq -n --arg url "$url" --arg sha256 "$PULSE_RUNTIME_IMAGE_SHA256" '{url: $url, sha256: $sha256, verified: true}' > results/upstream-libc/image-verification.json
+      - name: Fetch reviewed emulator Action
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: openharmony-rs/emulator-action
+          ref: 07afed5305e89fbdac4f6e8a5560e61e3dcb77ae
+          path: .runtime-emulator
+          persist-credentials: false
+      - name: Enforce archive verification immediately before extraction
+        run: |
+          test "$(grep -c '^        unzip -q' .runtime-emulator/action.yml)" -eq 1
+          sed -i '/^        unzip -q/i\        echo "$PULSE_RUNTIME_IMAGE_SHA256  $HOME/.cache/oniro-emulator/${ONIRO_EMULATOR_RELEASE}/${ONIRO_EMULATOR_ASSET}" | sha256sum --check --strict' .runtime-emulator/action.yml
+      - name: Start pinned Oniro emulator
+        id: emulator
+        uses: ./.runtime-emulator
+        with:
+          release: v6.1
+          asset: oniro_emulator.zip
+          cache: 'true'
+          connect-key: 127.0.0.1:55555
+          log-path: /tmp/oniro-emulator.log
+          port-wait-seconds: '600'
+          hdc-wait-seconds: '300'
+          accel: auto
+          audio: none
+      - name: Confirm archive identity after Action setup
+        run: |
+          archive="$HOME/.cache/oniro-emulator/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"
+          echo "$PULSE_RUNTIME_IMAGE_SHA256  $archive" | sha256sum --check --strict
+      - name: Execute upstream ABI checks in guest through Rust CLI
+        run: target/debug/ohos-pulse upstream-runtime --build results/upstream-libc/build --output results/upstream-libc/guest
+      - name: Stop emulator and preserve diagnostics
+        if: always()
+        run: |
+          mkdir -p results/upstream-libc
+          pgrep -x qemu-system-x86 > results/upstream-libc/emulator-pids.txt || true
+          terminated='[]'
+          killed='[]'
+          while read -r pid; do
+            if kill -TERM "$pid" 2>/dev/null; then
+              terminated=$(jq -c --argjson pid "$pid" '. + [$pid]' <<< "$terminated")
+            fi
+          done < results/upstream-libc/emulator-pids.txt
+          for _ in {1..50}; do
+            alive=false
+            while read -r pid; do
+              if kill -0 "$pid" 2>/dev/null; then alive=true; fi
+            done < results/upstream-libc/emulator-pids.txt
+            if [ "$alive" = false ]; then break; fi
+            sleep 0.2
+          done
+          while read -r pid; do
+            if kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null; then
+              killed=$(jq -c --argjson pid "$pid" '. + [$pid]' <<< "$killed")
+            fi
+          done < results/upstream-libc/emulator-pids.txt
+          jq -n --argjson terminated "$terminated" --argjson killed "$killed" '{terminated: $terminated, killed: $killed}' > results/upstream-libc/emulator-teardown.json
+          if [ -f /tmp/oniro-emulator.log ]; then cp /tmp/oniro-emulator.log results/upstream-libc/emulator.log; fi
+      - name: Publish outcome
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          EMULATOR_OUTCOME: ${{ steps.emulator.outcome }}
+        run: |
+          if [ -f results/upstream-libc/guest/summary.md ]; then
+            cat results/upstream-libc/guest/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            status=infra_error
+            reason='setup or emulator did not reach guest execution'
+            if [ -f results/upstream-libc/build/upstream.json ] && ! jq -e '.phases.inspection.status == "passed"' results/upstream-libc/build/upstream.json > /dev/null; then
+              status=blocked
+              reason='upstream build/inspection did not pass; inspect build/upstream.json'
+            fi
+            jq -n --arg status "$status" --arg reason "$reason" --arg job "$JOB_STATUS" --arg emulator "$EMULATOR_OUTCOME" '{format: "ohos-pulse-upstream-setup-1", runtime: {status: $status, reason: $reason}, job_status: $job, emulator_outcome: $emulator}' > results/upstream-libc/setup-outcome.json
+            echo "Runtime: $status. $reason. SDK provenance verification remains unresolved." >> "$GITHUB_STEP_SUMMARY"
+            if [ -f results/upstream-libc/build/summary.md ]; then cat results/upstream-libc/build/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+          fi
+      - name: Upload complete experiment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: upstream-libc-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/upstream-libc/
+          retention-days: 14
+          if-no-files-found: error
