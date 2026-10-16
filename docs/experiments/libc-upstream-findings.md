@@ -114,3 +114,19 @@ This is one successful bounded ABI run, not a passing full upstream target or
 behavioral validation of every listed API. Repeated runtime validation and full
 target adaptation remain outstanding. Local evidence has not been remotely
 archived; SDK archive provenance remains unresolved.
+
+## 2026-10-16: full-target diagnostic inventory
+
+All 361 C error diagnostics from the ARM64 kernel-probe attempt are classified
+into 138 category/subject pairs; see the [blocker inventory](libc-upstream-diagnostics.md).
+There are 100 missing constants, eight missing struct types, 23 undeclared
+functions, two header conflicts and five field-related subjects. These are
+grouped observations, not independent defect counts. Isolated probes reproduce
+136 subjects; the two sysinfo field probes pass with only the libc header,
+identifying the original header-composition trigger.
+
+Of the 23 functions, 21 are exported by the observed guest libc but none by the
+SDK linking libc. The two pthread join extensions are absent from both export
+tables. Representative Rust programs also fail at SDK linking for explicit_bzero
+and pthread_tryjoin_np. No SDK/source/coverage changes were made. Decisions on
+adaptation and fixes remain deferred; later full-target stages remain unverified.
