@@ -1,11 +1,12 @@
 # Design: libc upstream tests on OpenHarmony
 
-Status: proposed; no upstream-suite outcome has been established.
+Status: first hosted build attempt blocked by upstream SDK-header kernel-version
+detection; see [findings](libc-upstream-findings.md). No upstream ABI runtime result.
 Date: 2026-10-16.
 
 The first Rust adapter and manual workflow are implemented for review. See
 [experiment usage](libc-upstream-usage.md) for commands and evidence semantics.
-Hosted outcome and repeatability remain unverified.
+Successful build/runtime and repeatability remain unverified.
 
 ## 1. Objective
 

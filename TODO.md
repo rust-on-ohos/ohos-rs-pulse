@@ -8,7 +8,10 @@ Completed implementation and experiment evidence belong in the project documenta
 - [ ] Review and run the bounded [libc upstream test experiment](docs/experiments/libc-upstream-tests.md).
   Start with the pinned ctest target; establish nonempty coverage and harness
   completion semantics before claiming a passing upstream runtime result.
-  The Rust adapter/manual workflow are implemented; hosted validation is pending.
+  The Rust adapter/manual workflow are implemented. The first hosted attempt
+  reached an [SDK-header version-probe blocker](docs/experiments/libc-upstream-findings.md);
+  real local API 23 builds reproduced it. A candidate probe fix exposes further
+  C header/declaration errors; classify those errors before adding OH-specific rules.
 - [ ] Add scheduled upstream release discovery after the first recipe is verified.
   Resolve each selected release to an immutable commit and lockfile, preserve
   version-specific outcomes, and report unsupported harness changes explicitly.

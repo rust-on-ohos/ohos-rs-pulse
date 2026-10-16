@@ -460,6 +460,7 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
             "build tool/SDK identity differs from pins"
         );
         verify_c_environment(&environment, &pins)?;
+        capture_kernel_probe(&mut executor, &environment, &mut report.diagnostics)?;
         let readelf = environment["toolchain"]["readelf"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("SDK readelf unavailable"))?;
@@ -571,6 +572,12 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
         let generated =
             capture_generated(&target_dir.join(&pins.target).join("debug/build"), output);
         if command.status != Status::Passed {
+            let stderr = fs::read_to_string(output.join(&command.stderr))?;
+            if stderr.contains("failed to detect kernel version for Linux target") {
+                let reason = "upstream libc-test could not detect the SDK header kernel version; inspect logs/upstream-kernel-probe.*.log before proposing an adaptation";
+                report.phases.get_mut("test_build").unwrap().reason = Some(reason.into());
+                report.diagnostics.push(reason.into());
+            }
             if let Err(error) = generated {
                 report
                     .diagnostics
@@ -628,6 +635,35 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
     }
     report.write(output)?;
     Ok(report.exit_code())
+}
+
+fn capture_kernel_probe(
+    executor: &mut Executor,
+    environment: &Value,
+    diagnostics: &mut Vec<String>,
+) -> Result<()> {
+    // Mirror the Linux portion of upstream's version probe using only target SDK headers.
+    let probe = executor.output.join("kernel-probe.c");
+    fs::write(
+        &probe,
+        "#if defined(__linux__) && defined(__has_include)\n#if __has_include(<linux/version.h>)\n#define PULSE_HAS_LINUX_VERSION_HEADER 1\n#include <linux/version.h>\n#else\n#define PULSE_HAS_LINUX_VERSION_HEADER 0\n#endif\n#endif\n#include <stdio.h>\n",
+    )?;
+    let clang = environment["toolchain"]["clang"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("SDK clang missing"))?;
+    let mut command = vec![clang.to_owned()];
+    let flags: Vec<String> = serde_json::from_value(environment["flags"]["cflags"].clone())?;
+    command.extend(flags);
+    command.extend(args(&["-x", "c", "-dM", "-E", &probe.to_string_lossy()]));
+    let record = executor.execute("upstream-kernel-probe", &command, Duration::from_secs(30))?;
+    if record.status != Status::Passed {
+        diagnostics.push(format!(
+            "SDK header diagnostic probe {}; upstream test-build will still be attempted",
+            record.status
+        ));
+    }
+    // Never inject version macros or use host uname as a substitute for SDK-header identity.
+    Ok(())
 }
 
 fn capture_generated(directory: &Path, output: &Path) -> Result<(String, String)> {

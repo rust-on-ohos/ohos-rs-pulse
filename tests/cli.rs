@@ -370,7 +370,10 @@ case "$1" in
 esac
 "#,
         );
-        executable(&self.tools.join("clang"), "echo test-clang");
+        executable(
+            &self.tools.join("clang"),
+            "if [ \"$PULSE_TEST_MODE\" = kernel-probe-failed ] && [ \"$1\" != --version ]; then echo probe-failed >&2; exit 9; fi; echo test-clang",
+        );
         executable(
             &self.tools.join("sha256sum"),
             r#"
@@ -409,6 +412,7 @@ case "$1 $2" in
    mkdir -p "$base/build/libc-test-test/out" "$base/deps"
    cp "$PULSE_TEST_GENERATED" "$base/build/libc-test-test/out/ctest_output.rs"
    echo '/* generated C test double */' > "$base/build/libc-test-test/out/ctest_output.c"
+   if [ "$PULSE_TEST_MODE" = kernel-probe-failed ]; then echo 'failed to detect kernel version for Linux target' >&2; exit 101; fi
    if [ "$PULSE_TEST_MODE" = build-failed ]; then echo upstream-compile-failed >&2; exit 17; fi
    cat > "$base/deps/ctest-test" <<'PROGRAM'
 #!/bin/sh
@@ -575,4 +579,30 @@ fn upstream_rejects_host_c_compiler_configuration_before_build() {
             .iter()
             .any(|c| c["name"] == "upstream-test-build")
     );
+}
+
+#[test]
+fn kernel_probe_diagnostics_preserve_original_upstream_build_failure() {
+    let h = Harness::new();
+    let source = h.upstream_source();
+    let result = h.upstream_build(&source, "kernel-probe-failed");
+    assert_eq!(result.status.code(), Some(1));
+    let report = h.upstream_report("upstream-build");
+    assert_eq!(report["phases"]["test_build"]["status"], "failed");
+    assert_eq!(report["phases"]["test_build"]["command"]["exit_code"], 101);
+    assert!(
+        report["phases"]["test_build"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("SDK header kernel version")
+    );
+    let probe = report["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "upstream-kernel-probe")
+        .unwrap();
+    assert_eq!(probe["exit_code"], 9);
+    assert!(h.temp.path().join("upstream-build/kernel-probe.c").exists());
+    assert!(!report["diagnostics"].as_array().unwrap().is_empty());
 }

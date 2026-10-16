@@ -1,6 +1,7 @@
 # Running the upstream libc ABI experiment
 
-Status: implementation ready for review; no hosted upstream-suite outcome yet.
+Status: first hosted attempt reached an upstream SDK-header version-probe blocker;
+see [findings](libc-upstream-findings.md). No ABI runtime outcome yet.
 This experiment is separate from the existing libc file-round-trip workflow.
 
 ## Reviewed inputs
@@ -117,7 +118,11 @@ harness changes/empty coverage, zero/missing summaries, nonzero guest status,
 transfer/deployed-digest/cleanup failures and timeout. Existing smoke tests also
 run to catch transport regressions.
 
-The next real action is a maintainer-reviewed hosted manual attempt. Keep its
-first unmodified build/runtime outcome even if it fails. Diagnose missing headers,
+Each build retains an SDK-targeted kernel-header preprocessor diagnostic
+(`kernel-probe.c` and logs/upstream-kernel-probe.*.log). It does not change upstream
+sources, inject version macros or suppress the original failure. Review that
+evidence when diagnosing version detection failures.
+
+Keep unmodified build/runtime outcomes even if they fail. Diagnose missing headers,
 ABI disagreements or environment assumptions before proposing any OH-specific
 patch. Repeatability and scheduled new-release testing follow recipe validation.
