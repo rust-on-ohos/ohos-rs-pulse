@@ -1,0 +1,97 @@
+--- a/libc-test/build/main.rs
++++ b/libc-test/build/main.rs
+@@ -56,6 +56,9 @@
+ }
+ 
+ fn do_ctest(t: &Target) {
++    if t.triple == "x86_64-unknown-linux-ohos" {
++        return test_ohos_sdk23_core(t);
++    }
+     match t {
+         t if t.android() => test_android(t),
+         t if t.apple() => test_apple(t),
+@@ -80,6 +83,56 @@
+         t if t.aix() => return test_aix(t),
+         t => panic!("unknown target {t:?}"),
+     }
++}
++
++// Bounded experimental profile, not a replacement for the full Linux ABI target.
++fn test_ohos_sdk23_core(t: &Target) {
++    assert_eq!(t.triple, "x86_64-unknown-linux-ohos");
++    let mut cfg = ctest_cfg();
++    cfg.define("_GNU_SOURCE", None);
++    for header in ["sys/types.h", "sys/stat.h", "sys/time.h", "sys/uio.h",
++        "sys/mman.h", "sys/socket.h", "netinet/in.h", "unistd.h", "fcntl.h",
++        "stdlib.h", "stdio.h", "string.h", "time.h", "errno.h", "poll.h"] {
++        cfg.header(header);
++    }
++    cfg.skip_alias(|a| ![
++        "c_char", "c_schar", "c_uchar", "c_short", "c_ushort", "c_int", "c_uint",
++        "c_long", "c_ulong", "c_longlong", "c_ulonglong", "size_t", "ssize_t",
++        "off_t", "mode_t", "pid_t", "uid_t", "gid_t", "time_t", "suseconds_t",
++        "clockid_t", "socklen_t", "sa_family_t", "in_port_t", "in_addr_t", "nfds_t",
++    ].contains(&a.ident()));
++    cfg.skip_struct(|s| ![
++        "timespec", "timeval", "stat", "iovec", "pollfd", "sockaddr", "sockaddr_in",
++        "in_addr", "linger",
++    ].contains(&s.ident()));
++    cfg.skip_union(|_| true);
++    cfg.skip_static(|_| true);
++    cfg.skip_const(|c| ![
++        "O_RDONLY", "O_WRONLY", "O_RDWR", "O_CREAT", "O_EXCL", "O_TRUNC", "O_APPEND",
++        "O_CLOEXEC", "SEEK_SET", "SEEK_CUR", "SEEK_END", "S_IFMT", "S_IFREG", "S_IFDIR",
++        "S_IRUSR", "S_IWUSR", "S_IXUSR", "EACCES", "EEXIST", "EINTR", "EINVAL",
++        "ENOENT", "ENOMEM", "EPERM", "EOF", "EXIT_SUCCESS", "EXIT_FAILURE",
++        "PROT_NONE", "PROT_READ", "PROT_WRITE", "MAP_PRIVATE", "MAP_SHARED",
++        "MAP_ANONYMOUS", "AF_INET", "SOCK_STREAM", "SOCK_DGRAM", "SOL_SOCKET",
++        "SO_REUSEADDR", "SHUT_RD", "SHUT_WR", "SHUT_RDWR", "POLLIN", "POLLOUT",
++        "POLLERR", "POLLHUP", "CLOCK_REALTIME", "CLOCK_MONOTONIC",
++    ].contains(&c.ident()));
++    cfg.skip_fn(|f| ![
++        "open", "close", "read", "write", "pread", "pwrite", "lseek", "unlink",
++        "rename", "mkdir", "rmdir", "stat", "fstat", "lstat", "chmod", "fchmod",
++        "fsync", "fdatasync", "dup", "dup2", "fcntl", "access", "getpid", "getuid",
++        "getgid", "malloc", "calloc", "realloc", "free", "memcpy", "memmove",
++        "memset", "memcmp", "strlen", "strcmp", "strcpy", "clock_gettime",
++        "gettimeofday", "nanosleep", "time", "socket", "bind", "listen", "accept",
++        "connect", "getsockname", "getpeername", "getsockopt", "setsockopt",
++        "shutdown", "send", "recv", "sendto", "recvfrom", "poll", "readv", "writev",
++        "mmap", "munmap", "mprotect",
++    ].contains(&f.ident()));
++    cfg.rename_struct_field(|s, f| {
++        (s.ident() == "stat" && f.ident().ends_with("_nsec"))
++            .then(|| f.ident().replace("e_nsec", ".tv_nsec"))
++    });
++    ctest::generate_test(&mut cfg, "../src/lib.rs", "ctest_output.rs").unwrap();
+ }
+ 
+ fn ctest_cfg() -> ctest::TestGenerator {
+@@ -6460,6 +6513,7 @@
+         let re = Regex::new(r"^\s*#\s*define\s+(\w+)\s+(.*?)\s*$").unwrap();
+         let obsd_re = Regex::new(r"^OpenBSD(\d+)_(\d+)$").unwrap();
+         let apple_re = Regex::new(r"^__[A-Z]*_(\d+)_(\d+)").unwrap();
++        let mut linux_version_code = None;
+ 
+         for line in out.lines() {
+             let Some(caps) = re.captures(line) else {
+@@ -6469,6 +6523,7 @@
+             let value = &caps[2];
+ 
+             match name {
++                "LINUX_VERSION_CODE" => linux_version_code = value.parse::<u32>().ok(),
+                 "LINUX_VERSION_MAJOR" => {
+                     ret.linux.get_or_insert_default().0 = value.parse().unwrap()
+                 }
+@@ -6544,6 +6599,11 @@
+             }
+         }
+ 
++        if ret.linux.is_none() {
++            if let Some(code) = linux_version_code {
++                ret.linux = Some((code >> 16, (code >> 8) & 0xff));
++            }
++        }
+         println!("cargo:warning=detected versions: {ret:?}");
+         ret
+     }

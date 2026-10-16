@@ -1,0 +1,15 @@
+{
+  "distribution": "OpenHarmony community QEMU (cargo-ohos)",
+  "emulator_action": "",
+  "image_repository": "harmony-contrib/ohos-qemu",
+  "image_release": "v20260919",
+  "image_asset": "openharmony-qemu-arm64-arm64_virt-phone.tar.gz",
+  "image_asset_id": 0,
+  "image_sha256": "eda208b8ae5375e42af0f1ad6756d9e3ba57dd6ee9b13c2c7917c46b4ab14710",
+  "connect_key": "127.0.0.1:5555",
+  "guest_base": "/data/local/tmp",
+  "execution_timeout_seconds": 120,
+  "transport_timeout_seconds": 30,
+  "expected_os_version": "OpenHarmony-7.0.0.39",
+  "expected_api_version": 26
+}

@@ -2,6 +2,15 @@ name: Upstream libc ABI experiment
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Upstream baseline or explicitly bounded adaptation'
+        type: choice
+        default: baseline
+        options:
+          - baseline
+          - kernel-probe
+          - sdk23-core
 
 permissions:
   contents: read
@@ -56,7 +65,9 @@ jobs:
             echo "$toolchains" >> "$GITHUB_PATH"
           } 2>&1 | tee results/upstream-libc/setup.log
       - name: Build selected upstream test through Rust CLI
-        run: target/debug/ohos-pulse upstream-build --source .upstream-libc --output results/upstream-libc/build
+        env:
+          BUILD_PROFILE: ${{ inputs.profile }}
+        run: target/debug/ohos-pulse upstream-build --source .upstream-libc --output results/upstream-libc/build --profile "$BUILD_PROFILE"
       - name: Download and verify pinned image
         run: |
           archive="$HOME/.cache/oniro-emulator/$PULSE_RUNTIME_IMAGE_RELEASE/$PULSE_RUNTIME_IMAGE_ASSET"

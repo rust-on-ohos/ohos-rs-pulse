@@ -1,0 +1,8 @@
+{
+  "rust_version": "1.99.0",
+  "cargo_ohos_version": "0.3.4",
+  "sdk_release": "7.0",
+  "sdk_version": "26.0.0.38",
+  "sdk_api_version": 26,
+  "target": "aarch64-unknown-linux-ohos"
+}

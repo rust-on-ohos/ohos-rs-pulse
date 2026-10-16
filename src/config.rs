@@ -27,6 +27,10 @@ pub struct RuntimeConfig {
     pub guest_base: String,
     pub execution_timeout_seconds: u64,
     pub transport_timeout_seconds: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_os_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_api_version: Option<u32>,
 }
 
 pub fn load_build(root: &Path) -> Result<BuildConfig> {
@@ -40,8 +44,11 @@ pub fn load_build(root: &Path) -> Result<BuildConfig> {
 }
 
 pub fn load_runtime(root: &Path) -> Result<RuntimeConfig> {
-    let config: RuntimeConfig =
-        serde_json::from_slice(&fs::read(root.join("config/runtime.json"))?)?;
+    load_runtime_file(&root.join("config/runtime.json"))
+}
+
+pub fn load_runtime_file(path: &Path) -> Result<RuntimeConfig> {
+    let config: RuntimeConfig = serde_json::from_slice(&fs::read(path)?)?;
     ensure!(
         config.guest_base == "/data/local/tmp",
         "unsupported guest base"

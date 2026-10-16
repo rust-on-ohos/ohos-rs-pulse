@@ -55,6 +55,10 @@ impl Harness {
         executable(&tools.join("rustc"), "echo 'rustc 1.99.0 (test)' ");
         executable(&tools.join("param"), "echo OpenHarmony-test");
         executable(
+            &tools.join("uname"),
+            "if [ \"$PULSE_TEST_MODE\" = wrong-guest-arch ]; then echo aarch64; else echo x86_64; fi",
+        );
+        executable(
             &tools.join("readelf"),
             "echo 'Advanced Micro Devices X86-64 /lib/ld-musl-x86_64.so.1 NEEDED libc.so'",
         );
@@ -524,6 +528,7 @@ fn upstream_runtime_uses_custom_harness_and_preserves_failure_boundaries() {
         ("nonzero", "failed", 1),
         ("receive-failed", "infra_error", 2),
         ("digest-mismatch", "infra_error", 2),
+        ("wrong-guest-arch", "infra_error", 2),
         ("cleanup-failed", "infra_error", 2),
         ("timeout", "timed_out", 1),
     ] {
@@ -605,4 +610,49 @@ fn kernel_probe_diagnostics_preserve_original_upstream_build_failure() {
     assert_eq!(probe["exit_code"], 9);
     assert!(h.temp.path().join("upstream-build/kernel-probe.c").exists());
     assert!(!report["diagnostics"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn upstream_runtime_enforces_selected_guest_version() {
+    for (version, code) in [("OpenHarmony-test", 0), ("OpenHarmony-other", 2)] {
+        let h = Harness::new();
+        let source = h.upstream_source();
+        assert!(h.upstream_build(&source, "").status.success());
+        let path = h.root.join("config/runtime.json");
+        let mut profile: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        profile["expected_os_version"] = json!(version);
+        fs::write(path, serde_json::to_vec(&profile).unwrap()).unwrap();
+        assert_eq!(h.upstream_runtime("").status.code(), Some(code));
+        if code != 0 {
+            let report = h.upstream_report("upstream-runtime");
+            assert!(
+                report["commands"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|c| c["name"] != "deploy")
+            );
+        }
+    }
+}
+
+#[test]
+fn arm64_profile_cannot_use_x86_sdk_pins() {
+    let h = Harness::new();
+    let source = h.upstream_source();
+    let result = h
+        .command("")
+        .args([
+            "upstream-build",
+            "--profile",
+            "sdk26-arm64-core",
+            "--source",
+        ])
+        .arg(source)
+        .arg("--output")
+        .arg(h.temp.path().join("wrong-profile"))
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("ARM64 / API 26"));
 }

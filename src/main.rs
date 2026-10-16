@@ -33,6 +33,12 @@ enum Commands {
         source: PathBuf,
         #[arg(long)]
         output: PathBuf,
+        /// Explicit version-specific adaptation; baseline preserves upstream sources.
+        #[arg(long, value_enum, default_value = "baseline")]
+        profile: upstream::BuildProfile,
+        /// Override build pins for a separate upstream experiment.
+        #[arg(long)]
+        build_config: Option<PathBuf>,
     },
     /// Run an upstream ctest build in the provisioned OH guest.
     UpstreamRuntime {
@@ -40,6 +46,8 @@ enum Commands {
         build: PathBuf,
         #[arg(long)]
         output: PathBuf,
+        #[arg(long)]
+        runtime_config: Option<PathBuf>,
     },
     /// Check and link the reviewed fixture, optionally execute on a provisioned guest.
     Run {
@@ -94,20 +102,38 @@ fn rebase(command: &mut report::CommandRecord) {
 fn execute(cli: Cli) -> Result<i32> {
     let root = cli.root.canonicalize()?;
     match cli.command {
-        Commands::UpstreamBuild { source, output } => {
+        Commands::UpstreamBuild {
+            source,
+            output,
+            profile,
+            build_config,
+        } => {
             let config = upstream::load_config(&root)?;
             let source = source.canonicalize()?;
             let output = fresh_output(&output)?;
-            upstream::build(&root, &source, &output, config)
+            let build_config = build_config.map(|p| root.join(p));
+            upstream::build(
+                &root,
+                &source,
+                &output,
+                config,
+                profile,
+                build_config.as_deref(),
+            )
         }
-        Commands::UpstreamRuntime { build, output } => {
+        Commands::UpstreamRuntime {
+            build,
+            output,
+            runtime_config,
+        } => {
             let build = build.canonicalize()?;
             let output = fresh_output(&output)?;
             ensure!(
                 !output.starts_with(&build) && !build.starts_with(&output),
                 "build/output directories overlap"
             );
-            upstream::runtime(&root, &build, &output)
+            let runtime_config = runtime_config.map(|p| root.join(p));
+            upstream::runtime(&root, &build, &output, runtime_config.as_deref())
         }
         Commands::Run {
             output,

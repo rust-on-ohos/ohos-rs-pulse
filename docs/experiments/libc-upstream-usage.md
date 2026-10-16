@@ -1,7 +1,11 @@
 # Running the upstream libc ABI experiment
 
-Status: first hosted attempt reached an upstream SDK-header version-probe blocker;
-see [findings](libc-upstream-findings.md). No ABI runtime outcome yet.
+The separate [ARM64 / OH 7.0 recipe](libc-upstream-arm64.md) uses cargo-ohos-managed
+QEMU and explicit API 26 build/runtime configurations. Defaults below retain
+the original OH 6.1 / x86_64 baseline.
+
+Status: the full target remains build-blocked; a bounded ARM64 / API 26 profile
+has one successful guest run. See [findings](libc-upstream-findings.md).
 This experiment is separate from the existing libc file-round-trip workflow.
 
 ## Reviewed inputs

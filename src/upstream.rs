@@ -60,6 +60,48 @@ pub fn load_config(root: &Path) -> Result<Config> {
 }
 const REVIEWED_TEMPLATE_SHA: &str =
     "898fd73091c473df2529aaeaf073b9ebf7bc510a4c36c1ff1652420e9de229fb";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildProfile {
+    Baseline,
+    KernelProbe,
+    Sdk23Core,
+    Sdk26Arm64Core,
+}
+
+impl BuildProfile {
+    fn recipe(self) -> Option<(&'static str, &'static str, &'static str)> {
+        match self {
+            Self::Baseline => None,
+            Self::KernelProbe => Some((
+                "patches/libc/0.2.190-kernel-version-code.patch",
+                "27336208211ced15e3c6d35471e181995aec071184bc80ca1196b7bb09416c43",
+                "Full upstream ctest target with only kernel-header version detection adapted.",
+            )),
+            Self::Sdk23Core => Some((
+                "patches/libc/0.2.190-ohos-sdk23-core.patch",
+                "9b10e6cbac89de30502d471f725367930e9f3e12512547ced12d907045983ddb",
+                "Bounded file, memory, time and IPv4 socket ABI allowlist; all other APIs excluded. This is not full upstream ctest coverage or behavioral API testing.",
+            )),
+            Self::Sdk26Arm64Core => Some((
+                "patches/libc/0.2.190-ohos-sdk26-arm64-core.patch",
+                "d97f372e81eea5f35f53faa657f0ccdd0f583420f42aea87fc9da666c904fefc",
+                "Bounded ARM64 file, memory, time and IPv4 socket ABI allowlist for SDK API 26; all other APIs excluded. This is not full upstream ctest coverage or behavioral API testing.",
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Adaptation {
+    pub profile: BuildProfile,
+    pub patch: String,
+    pub patch_sha256: String,
+    pub build_script: String,
+    pub build_script_sha256: String,
+    pub scope: String,
+}
 // This exact main body comes from the Cargo.lock-selected ctest 0.5.1 template.
 const REVIEWED_MAIN: &str = r#"fn main() {
     println!("RUNNING ALL TESTS");
@@ -94,6 +136,8 @@ pub struct Experiment {
     pub driver_source_commit: Option<String>,
     pub driver_source_dirty: Option<bool>,
     pub upstream: Config,
+    #[serde(default)]
+    pub adaptation: Option<Adaptation>,
     pub build_pins: BuildConfig,
     pub lockfile_sha256: Option<String>,
     pub resolved_features: Vec<String>,
@@ -133,7 +177,7 @@ impl Experiment {
             driver_source_commit: None,
             driver_source_dirty: None,
             run: RunIdentity { id: format!("pulse-{}", uuid::Uuid::new_v4().simple()), timestamp_utc: chrono::Utc::now().to_rfc3339(), cli_version: env!("CARGO_PKG_VERSION").into(), source_commit: config.commit.clone(), source_dirty: false, ci_run_id: std::env::var("GITHUB_RUN_ID").ok(), ci_run_attempt: std::env::var("GITHUB_RUN_ATTEMPT").ok() },
-            upstream: config, build_pins: pins, lockfile_sha256: None, resolved_features: vec![], generator: None, environment: None, rustc: None, phases, artifact: None, coverage: None,
+            upstream: config, adaptation: None, build_pins: pins, lockfile_sha256: None, resolved_features: vec![], generator: None, environment: None, rustc: None, phases, artifact: None, coverage: None,
             runtime_environment: None, cleanup: Stage::new(Status::NotRun, "guest directory was not created"), commands: vec![], diagnostics: vec![],
             sdk_provenance: "SDK archive digest/attestation acceptance remains unresolved; installed version/API are checked.".into(),
         }
@@ -154,6 +198,20 @@ impl Experiment {
         }
     }
     fn validate(&self) -> Result<()> {
+        if let Some(adaptation) = &self.adaptation {
+            let (_, expected, scope) = adaptation
+                .profile
+                .recipe()
+                .ok_or_else(|| anyhow::anyhow!("baseline cannot have an adaptation"))?;
+            ensure!(
+                adaptation.patch_sha256 == expected
+                    && adaptation.scope == scope
+                    && safe_relative(&adaptation.patch)
+                    && safe_relative(&adaptation.build_script)
+                    && self.run.source_dirty,
+                "invalid adaptation identity"
+            );
+        }
         ensure!(
             self.format == "ohos-pulse-upstream-libc-experiment-1",
             "unsupported experiment format"
@@ -292,6 +350,14 @@ impl Experiment {
                 escape(phase.reason.as_deref().unwrap_or(""))
             ));
         }
+        if let Some(adaptation) = &saved.adaptation {
+            summary.push_str(&format!(
+                "\nAdaptation: `{:?}`; patch SHA-256 `{}`.\n\n{}\n",
+                adaptation.profile,
+                adaptation.patch_sha256,
+                escape(&adaptation.scope)
+            ));
+        }
         if let Some(c) = &saved.coverage {
             let comparisons = c
                 .successful_comparisons
@@ -326,21 +392,46 @@ fn required(executor: &mut Executor, name: &str, values: &[&str], seconds: u64) 
     executor.stdout(&command)
 }
 
-pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Result<i32> {
+pub fn build(
+    root: &Path,
+    source: &Path,
+    output: &Path,
+    config: Config,
+    profile: BuildProfile,
+    build_config: Option<&Path>,
+) -> Result<i32> {
     ensure!(
         !output.starts_with(source) && !source.starts_with(output),
         "source/output directories overlap"
     );
-    let pins = config::load_build(root)?;
+    let pins = match build_config {
+        Some(path) => serde_json::from_slice::<BuildConfig>(&fs::read(path)?)?,
+        None => config::load_build(root)?,
+    };
+    let (architecture, elf_machine, loader, _) = target_details(&pins.target)?;
+    if profile == BuildProfile::Sdk23Core {
+        ensure!(
+            pins.target == "x86_64-unknown-linux-ohos" && pins.sdk_api_version == 23,
+            "sdk23-core requires x86_64 / API 23"
+        );
+    }
+    if profile == BuildProfile::Sdk26Arm64Core {
+        ensure!(
+            pins.target == "aarch64-unknown-linux-ohos" && pins.sdk_api_version == 26,
+            "sdk26-arm64-core requires ARM64 / API 26"
+        );
+    }
     let mut report = Experiment::new(config.clone(), pins.clone());
     let mut executor = Executor::new(output, source)?;
     fs::create_dir(output.join("config"))?;
-    for name in ["upstream-libc.json", "feasibility.json"] {
-        fs::copy(
-            root.join("config").join(name),
-            output.join("config").join(name),
-        )?;
-    }
+    fs::copy(
+        root.join("config/upstream-libc.json"),
+        output.join("config/upstream-libc.json"),
+    )?;
+    fs::write(
+        output.join("config/feasibility.json"),
+        serde_json::to_vec_pretty(&pins)?,
+    )?;
     let mut phase = "preparation";
     let outcome = (|| -> Result<()> {
         executor.cwd = root.to_owned();
@@ -418,6 +509,78 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
             ],
             60,
         )?;
+        if let Some((patch_path, expected_sha, scope)) = profile.recipe() {
+            ensure!(
+                config.commit == "7b0ab5528dc7f361f3a0b4c06c2cad9971617f75",
+                "adaptation requires the reviewed libc 0.2.190 commit"
+            );
+            ensure!(
+                digest(&root.join(patch_path))? == expected_sha,
+                "adaptation patch changed; review and update its identity"
+            );
+            fs::copy(root.join(patch_path), output.join("adaptation.patch"))?;
+            let working = output.join("adapted-source");
+            fs::create_dir(&working)?;
+            required(
+                &mut executor,
+                "adaptation-extract",
+                &[
+                    "tar",
+                    "-xf",
+                    &output.join("upstream-source.tar").to_string_lossy(),
+                    "-C",
+                    &working.to_string_lossy(),
+                ],
+                60,
+            )?;
+            executor.cwd = working;
+            // An isolated repository prevents git apply from discovering the driver's parent repository.
+            required(
+                &mut executor,
+                "adaptation-init",
+                &["git", "init", "--quiet"],
+                30,
+            )?;
+            required(
+                &mut executor,
+                "adaptation-check",
+                &[
+                    "git",
+                    "apply",
+                    "--check",
+                    &output.join("adaptation.patch").to_string_lossy(),
+                ],
+                30,
+            )?;
+            required(
+                &mut executor,
+                "adaptation-apply",
+                &[
+                    "git",
+                    "apply",
+                    &output.join("adaptation.patch").to_string_lossy(),
+                ],
+                30,
+            )?;
+            let script = "adapted-build-main.rs";
+            fs::copy(
+                executor.cwd.join("libc-test/build/main.rs"),
+                output.join(script),
+            )?;
+            ensure!(
+                digest(&output.join(script))? != digest(&source.join("libc-test/build/main.rs"))?,
+                "adaptation did not modify the test configuration"
+            );
+            report.run.source_dirty = true;
+            report.adaptation = Some(Adaptation {
+                profile,
+                patch: "adaptation.patch".into(),
+                patch_sha256: expected_sha.into(),
+                build_script: script.into(),
+                build_script_sha256: digest(&output.join(script))?,
+                scope: scope.into(),
+            });
+        }
         fs::copy(source.join("Cargo.lock"), output.join("Cargo.lock"))?;
         fs::create_dir(output.join("upstream-test-config"))?;
         for name in [
@@ -589,7 +752,7 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
         let generated = generated?;
         let rust_source = fs::read_to_string(output.join(&generated.0))?;
         let functions = inventory(&rust_source)?;
-        report.coverage = Some(Coverage { generated_function_count: functions.len(), generated_functions: functions, successful_comparisons: None, expected_comparisons: None, skip_count: None, exclusions_note: "Upstream generator skip/cfg rules are preserved in upstream-source.tar and generated C/Rust; total excluded checks is unknown. Successful comparisons are not generated-function counts.".into(), generated_rust_sha256: digest(&output.join(&generated.0))?, generated_c_sha256: digest(&output.join(&generated.1))?, generated_rust: generated.0, generated_c: generated.1 });
+        report.coverage = Some(Coverage { generated_function_count: functions.len(), generated_functions: functions, successful_comparisons: None, expected_comparisons: None, skip_count: None, exclusions_note: "Baseline rules are in upstream-source.tar; explicit adaptations and allowlists, when selected, are in adaptation.patch and adapted-build-main.rs. Generated C/Rust record the resulting checks; total excluded checks is unknown. Successful comparisons are not generated-function counts.".into(), generated_rust_sha256: digest(&output.join(&generated.0))?, generated_c_sha256: digest(&output.join(&generated.1))?, generated_rust: generated.0, generated_c: generated.1 });
         let stdout = executor.stdout(&command)?;
         let binary = select_artifact(
             &stdout,
@@ -608,14 +771,14 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
         let header = executor.stdout(&record)?;
         ensure!(
             record.status == Status::Passed
-                && header.contains("Advanced Micro Devices X86-64")
-                && header.contains("/lib/ld-musl-x86_64.so.1"),
+                && header.contains(elf_machine)
+                && header.contains(loader),
             "test artifact architecture/interpreter mismatch"
         );
         report.artifact = Some(Artifact {
             path: "artifacts/ctest".into(),
             sha256: digest(&copied)?,
-            architecture: "x86_64".into(),
+            architecture: architecture.into(),
             inspection: record.clone(),
         });
         report.phases.insert(phase.into(), Stage::executed(record));
@@ -632,6 +795,9 @@ pub fn build(root: &Path, source: &Path, output: &Path, config: Config) -> Resul
     // Retain generated sources/logs rather than large intermediate object directories.
     if output.join("target").exists() {
         fs::remove_dir_all(output.join("target"))?;
+    }
+    if output.join("adapted-source").exists() {
+        fs::remove_dir_all(output.join("adapted-source"))?;
     }
     report.write(output)?;
     Ok(report.exit_code())
@@ -817,13 +983,35 @@ pub fn completed(stdout: &str) -> Option<u64> {
     (count > 0).then_some(count)
 }
 
+fn target_details(
+    target: &str,
+) -> Result<(&'static str, &'static str, &'static str, &'static str)> {
+    match target {
+        "x86_64-unknown-linux-ohos" => Ok((
+            "x86_64",
+            "Advanced Micro Devices X86-64",
+            "/lib/ld-musl-x86_64.so.1",
+            "x86_64-linux-ohos",
+        )),
+        "aarch64-unknown-linux-ohos" => Ok((
+            "aarch64",
+            "AArch64",
+            "/lib/ld-musl-aarch64.so.1",
+            "aarch64-linux-ohos",
+        )),
+        _ => anyhow::bail!("unreviewed upstream target"),
+    }
+}
+
 fn verify_c_environment(environment: &Value, pins: &BuildConfig) -> Result<()> {
+    let (_, _, _, clang_triple) = target_details(&pins.target)?;
+    let cc_key = format!("CC_{}", pins.target.replace('-', "_"));
     ensure!(
         environment["target"]["rust_triple"] == pins.target,
         "C environment target differs from selected Rust target"
     );
     ensure!(
-        environment["env"]["CC_x86_64_unknown_linux_ohos"] == environment["toolchain"]["clang"]
+        environment["env"][&cc_key] == environment["toolchain"]["clang"]
             && environment["toolchain"]["clang"].is_string(),
         "target C compiler does not match SDK clang"
     );
@@ -835,7 +1023,7 @@ fn verify_c_environment(environment: &Value, pins: &BuildConfig) -> Result<()> {
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("target C flags missing"))?;
     for required in [
-        "--target=x86_64-linux-ohos".to_owned(),
+        format!("--target={clang_triple}"),
         format!("--sysroot={sysroot}"),
         "-D__MUSL__".into(),
     ] {
@@ -847,7 +1035,12 @@ fn verify_c_environment(environment: &Value, pins: &BuildConfig) -> Result<()> {
     Ok(())
 }
 
-pub fn runtime(root: &Path, build: &Path, output: &Path) -> Result<i32> {
+pub fn runtime(
+    root: &Path,
+    build: &Path,
+    output: &Path,
+    runtime_config: Option<&Path>,
+) -> Result<i32> {
     let mut report: Experiment = serde_json::from_slice(&fs::read(build.join("upstream.json"))?)?;
     report.validate()?;
     ensure!(
@@ -855,6 +1048,15 @@ pub fn runtime(root: &Path, build: &Path, output: &Path) -> Result<i32> {
         "build already requested execution"
     );
     crate::copy_evidence(build, &output.join("build-evidence"))?;
+    if let Some(adaptation) = &mut report.adaptation {
+        ensure!(
+            digest(&build.join(&adaptation.patch))? == adaptation.patch_sha256
+                && digest(&build.join(&adaptation.build_script))? == adaptation.build_script_sha256,
+            "adaptation evidence changed"
+        );
+        adaptation.patch = format!("build-evidence/{}", adaptation.patch);
+        adaptation.build_script = format!("build-evidence/{}", adaptation.build_script);
+    }
     for record in &mut report.commands {
         crate::rebase(record);
     }
@@ -885,11 +1087,28 @@ pub fn runtime(root: &Path, build: &Path, output: &Path) -> Result<i32> {
         report.write(output)?;
         return Ok(report.exit_code());
     }
-    let mut config = config::load_runtime(root)?;
+    let (architecture, _, loader, _) = target_details(&report.build_pins.target)?;
+    ensure!(
+        report
+            .artifact
+            .as_ref()
+            .is_some_and(|a| a.architecture == architecture),
+        "artifact architecture differs from build target"
+    );
+    let mut config = match runtime_config {
+        Some(path) => config::load_runtime_file(path)?,
+        None => config::load_runtime(root)?,
+    };
+    ensure!(
+        config
+            .expected_api_version
+            .is_none_or(|api| api == report.build_pins.sdk_api_version),
+        "runtime API differs from selected SDK API"
+    );
     config.execution_timeout_seconds = report.upstream.execution_timeout_seconds;
-    fs::copy(
-        root.join("config/runtime.json"),
+    fs::write(
         output.join("runtime-profile.json"),
+        serde_json::to_vec_pretty(&config)?,
     )?;
     report.runtime_environment = Some(RuntimeEnvironment {
         profile: config.clone(),
@@ -941,7 +1160,28 @@ pub fn runtime(root: &Path, build: &Path, output: &Path) -> Result<i32> {
             "uname -a; id; param get const.ohos.fullname; param get const.product.software.version",
             budget,
         )?);
-        guest.shell("guest-loader", "test -r /lib/ld-musl-x86_64.so.1", budget)?;
+        ensure!(
+            guest.shell("guest-architecture", "uname -m", budget)? == architecture,
+            "guest architecture differs from selected build target"
+        );
+        if let Some(expected) = &config.expected_os_version {
+            ensure!(
+                guest.shell("guest-os-version", "param get const.ohos.fullname", budget)?
+                    == *expected,
+                "guest OS differs from runtime pins"
+            );
+        }
+        if let Some(expected) = config.expected_api_version {
+            ensure!(
+                guest.shell(
+                    "guest-api-version",
+                    "param get const.ohos.apiversion",
+                    budget
+                )? == expected.to_string(),
+                "guest API differs from runtime pins"
+            );
+        }
+        guest.shell("guest-loader", &format!("test -r {loader}"), budget)?;
         let base = quote(&config.guest_base);
         guest.shell(
             "guest-writable-base",
@@ -985,7 +1225,7 @@ pub fn runtime(root: &Path, build: &Path, output: &Path) -> Result<i32> {
             .unwrap()
             .guest_dependencies = Some(guest.shell(
             "guest-dependencies",
-            &format!("/lib/ld-musl-x86_64.so.1 --list {quoted}/ctest"),
+            &format!("{loader} --list {quoted}/ctest"),
             budget,
         )?);
         let script = format!(

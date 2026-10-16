@@ -61,8 +61,8 @@ The isolated candidate [patch](../../patches/libc/0.2.190-kernel-version-code.pa
 adds a fallback decoder and leaves upstream assertions, bindings and skip rules
 unchanged. Its SHA-256 is
 27336208211ced15e3c6d35471e181995aec071184bc80ca1196b7bb09416c43.
-The baseline checkout remains clean. The candidate is not enabled by the workflow
-or the normal clean-source CLI path.
+The baseline checkout remains clean. The candidate is now available explicitly
+through the `kernel-probe` CLI/workflow profile; the default remains unmodified.
 
 After this fix, the build script reported linux: Some((5, 10)) and generated
 ctest_output.rs and ctest_output.c with 8,075 functions in run_all. None executed:
@@ -77,10 +77,40 @@ Disabling Clang's error limit changes diagnostic collection only. The 363 emitte
 errors include possible cascades and header-composition effects; do not report
 363 confirmed libc binding defects. Separate SDK header hygiene, upstream test
 configuration and real binding/declaration mismatches through smaller probes.
-No further skips or compatibility patches have been applied.
+This full-target attempt used no additional skips or compatibility patches.
 
 Generated sources, patch copies, Cargo JSON output and complete stderr are retained
 in the patched local result directories. They are local evidence, not committed
 or remotely archived; export them when needed for upstream review. No executable
-or guest runtime result was produced. Next, classify the errors with minimal
-probes and determine justified adaptations before attempting guest execution.
+or guest runtime result was produced by these full-target attempts. The bounded
+profile below is a separate experiment; full-target error classification remains
+outstanding.
+
+## 2026-10-16: bounded ARM64 / API 26 runtime result
+
+The separate [ARM64 recipe](libc-upstream-arm64.md) uses SDK 26.0.0.38 / API 26
+and a cargo-ohos-managed OpenHarmony-7.0.0.39 aarch64 guest (Linux 6.6.101).
+The unmodified upstream build still fails version detection. With only the
+version-detector patch, the full target still fails C compilation, including
+the __packed/sysinfo header conflicts and missing declarations.
+
+An explicit `sdk26-arm64-core` profile bounds the upstream generator to basic
+file, memory, time and IPv4 socket ABI allowlists. It does not change libc
+bindings. The original full-target failures are retained separately.
+
+The profile built 236 generated test functions and executed in the guest with:
+
+```text
+RUNNING ALL TESTS
+PASSED 270 tests
+```
+
+Actual guest exit status was 0, stderr was empty, and cleanup passed. The run ID
+is pulse-54b4ca8e8e754a56bb16abd9eae79182. Local evidence is in
+results/upstream-arm64-20261016T081134Z-4807-guest. Patch SHA-256:
+d97f372e81eea5f35f53faa657f0ccdd0f583420f42aea87fc9da666c904fefc.
+
+This is one successful bounded ABI run, not a passing full upstream target or
+behavioral validation of every listed API. Repeated runtime validation and full
+target adaptation remain outstanding. Local evidence has not been remotely
+archived; SDK archive provenance remains unresolved.
